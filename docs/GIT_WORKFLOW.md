@@ -16,15 +16,22 @@ git remote -v                     # must show .../multipli.git
 
 Teammates: add them on github.com → multipli → Settings → Collaborators. They clone with `git clone https://github.com/kapilankathirvel/multipli.git`.
 
+## Team rules (3 people pushing to `main`)
+- Everyone works on `main` but **only edits files they own** (ownership lists in `kapilan.md`, `varun.md`, `jeffrey.md`), so conflicts stay rare.
+- **Always pull before you push:** `git pull --rebase origin main`.
+- If a rebase conflict happens: fix the file, then `git add <file>` and `git rebase --continue`. If you're lost, `git rebase --abort` and ask Kapilan.
+- Contracts: run `forge test` before pushing. Dashboard: run `pnpm build`.
+
 ## Per-feature routine (every time)
 
 ```bash
 cd "C:\Users\Kapilan Kathirvel\Desktop\multipli"
 cd contracts && forge test && cd ..      # only push green code
 git status                               # review what changed
+git pull --rebase origin main            # get teammates' work first
 git add -A
-git commit -m "<message from the table below>"
-git push                                 # first push only: git push -u origin main
+git commit -m "<message from the table below / from your <name>.md>"
+git push
 ```
 
 ## Commit messages, one per feature (in build order)
@@ -32,10 +39,10 @@ git push                                 # first push only: git push -u origin m
 | Feature | Commit message |
 |---|---|
 | **Phase 1 (done)** | `feat(phase1): docs + fork harness + baseline exploits on real rwaUSD (S1, S3, S4)` |
-| M3 sources | `feat(sources): IPriceSource, ChainlinkSource (clamp-aware), MockSource` |
+| Frozen team interfaces | `chore(team): split work, freeze interfaces (IOracleGuard, abi/, fork.json schema)` |
+| K1 sources + executors | `feat(sources,executors): ChainlinkSource, MockSource, bounded Line/Hole executors` |
 | M4 aggregator | `feat(aggregator): weighted median, MAD outliers, confidence score 0-100` |
 | M5 SmartOSM | `feat(osm): SmartOSM drop-in with freshness, quarantine, zero-price invariant` |
-| M6 executors | `feat(executors): bounded LineExecutor and HoleExecutor` |
 | M6 controller | `feat(controller): GREEN/YELLOW/RED risk controller + liquidation guard` |
 | M7 scripts | `feat(scripts): Deploy and Spell scripts (Safe-impersonated install + rollback)` |
 | M8 fixes | `test(fork): OracleGuard neutralises S1-S4 on real rwaUSD` |

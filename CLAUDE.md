@@ -10,7 +10,17 @@ Read this file first in every session. Then open `PROGRESS.md` to see what's nex
 
 It is installed on a **mainnet fork** via one governance "spell" (impersonating the admin Safe). The demo shows exploits succeeding on the real contracts, then failing after the spell.
 
-Hackathon: 30 hours, solo/duo. **Critical path = contracts + fork tests.** Don't gold-plate.
+Hackathon: 30 hours, team of 3 (see below). **Critical path = Kapilan K1→K5 (contracts + fork tests).** Don't gold-plate.
+
+## Team & ownership (3 people)
+| Person | File | Owns |
+|---|---|---|
+| Kapilan (≈50%) | `kapilan.md` | The whole on-chain product: sources, executors, Aggregator, SmartOSM, RiskController, Deploy/Spell, fork tests, invariants, docs, PROGRESS.md |
+| Varun (≈25%) | `varun.md` | Independent add-ons: SessionCalendar, PythSource, demo-up scripts (`scripts/`), risk research (`research/`) |
+| Jeffrey (≈25%) | `jeffrey.md` | `dashboard/` (mock + live mode, scenario controls), pitch deck (`docs/PITCH.md`), demo video |
+
+**Parallel-by-design:** nobody waits for anybody. Everyone builds against the **frozen interfaces**: `contracts/src/interfaces/IOracleGuard.sol`, `contracts/src/interfaces/IPriceSource.sol`, `abi/*.json`, `deployments/fork.example.json`. The only cross-person step is Kapilan's **integration checkpoint (K7, ~hour 20)**.
+**Find out who you're working for** (ask if unclear), read their `<name>.md`, and **only edit files in that person's ownership list.** Never change a frozen interface without telling the whole team (and re-export `abi/`). Tick tasks in the person's own `<name>.md`. Only Kapilan's sessions edit `PROGRESS.md`.
 
 ## Doc map
 | File | Use it for |

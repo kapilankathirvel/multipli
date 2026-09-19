@@ -1,7 +1,9 @@
 # PROGRESS: OracleGuard
 
 > Living task board. **Update after every task:** tick the box, set the status, add a session-log line.
-> Owners: **A** = contracts/tests · **B** = dashboard/keeper/deck. Hours are budgets, not estimates to beat.
+> Owners: **K** = Kapilan (`kapilan.md`) · **V** = Varun (`varun.md`) · **J** = Jeffrey (`jeffrey.md`). Per-person task lists live in those files; Kapilan syncs them here.
+> Mapping: M3–M8, H3 → **K** (kapilan.md K1–K8) · H1 calendar, PythSource, M9 demo-up, risk research → **V** (varun.md V1–V4) · M10 dashboard + scenario controls, H5, deck, video → **J** (jeffrey.md J1–J6). H4 keeper is cut (the dashboard runs scenarios itself; forge test logs are the CLI fallback).
+> **Integration checkpoint:** ~hour 20 (kapilan.md K7), the only cross-person step.
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
