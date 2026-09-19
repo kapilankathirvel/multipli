@@ -46,17 +46,20 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - [x] **Mentor review R3:** `components/StateEffects.tsx` — "What this state changes" renders the `review.md` §R3 row for the current state (borrow ✅/⚠️/❌, repay ✅, liquidations ✅/⏸️, `Vat.line`, `Dog.hole`, "`Spotter.mat` never touched")
 - **Commit:** `feat(dashboard): Oracle War Room panels`
 
-### J3. Scenario controls (≈1.5h), your own code, no keeper needed
-- [ ] `src/scenarios.ts` using viem **test actions** against anvil (`increaseTime`, `mine`, `snapshot`, `revert`, `impersonateAccount`) + `IMockSource.setPrice/setOk` + `smartOsm.poke()` + `controller.sync(ilk)`
-- [ ] Buttons: Reset (revert to `snapshotId`) · S1 stale feed (warp 25h, set mocks stale) · S2 market −8% (mocks −8%) · S3 compromised source (one mock ×10) · S4 captured wick (all −15% → poke → recover) · Poke · Sync · Warp +1h. Exact steps: `docs/DEMO_SCRIPT.md` §B
-- [ ] In mock mode the buttons drive the fake data, so you can build and style it all now
-- [ ] ⚠️ Live mode: the MockSources are owned by **anvil account #0** (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, the deployer), so send `setPrice/setOk` from that account. `poke()`/`sync()` are permissionless.
-- [ ] ⚠️ Live mode: **refresh the three mock sources (`setPrice`) before every `poke()` and after every time warp.** They have a 1h max age; if they go stale the poke is skipped (found while testing K3). "Warp +1h" should = warp → setPrice(current market) → poke → sync
+### J3. Scenario controls (≈1.5h), your own code, no keeper needed — ✅ done (live path untested, no Foundry on this machine)
+- [x] `src/scenarios.ts` using viem **test actions** against anvil (`increaseTime`, `mine`, `snapshot`, `revert`, `impersonateAccount`) + `IMockSource.setPrice` + `smartOsm.poke()` + `controller.sync(ilk)`
+- [x] Buttons (`components/ScenarioBar.tsx`): Reset · S1 · S2 · S3 · S4 · Poke · Sync · Warp +1h, one `Runner` interface with a mock and a live implementation; busy state, and a status line that shows the revert reason when a tx fails
+- [x] In mock mode the buttons drive the simulated world (`applyScript`), so it all styles and demos without a chain
+- [x] ⚠️ Live mode: `setPrice` is sent from **anvil account #0** (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`), impersonated so no private key lives in the repo. `poke()`/`sync()` are permissionless.
+- [x] ⚠️ Live mode: sources are refreshed **inside** the poke helper — order is `waitForHop` (warp to `zzz + hop`, else `poke()` reverts `OSM/not-passed`) → `setPrice` → `poke`. Refreshing before the hop warp would re-stale the mocks (1h maxAge). "Warp +1h" = warp → refresh → poke → sync, and the mock world follows the same steps.
+- [x] Reset takes its own `evm_snapshot` on mount (`fork.json` ships `snapshotId: "0x0"`) and re-snapshots after each revert, since anvil consumes snapshots.
 - **Commit:** `feat(dashboard): scenario controls`
 
-### J4. Legacy vs OracleGuard panel (≈1h)
-- [ ] Side-by-side: Legacy OSM (price, "VALID" even when stale, age) vs OracleGuard (score, state)
-- [ ] S3 killer-moment banner: **"Legacy: 10 PAXG ($43,724) minted $312,319 → $268,595 bad debt"** vs "OracleGuard: blocked"
+### J4. Legacy vs OracleGuard panel (≈1h) — ✅ done
+- [x] Side-by-side `components/LegacyPanel.tsx`: Legacy OSM (price, **VALID** even when hours stale, age, "staleness check: none", 1 source) vs OracleGuard (score, state + 🛡️, OSM status/age, inliers counted)
+- [x] S3 killer-moment banner: **"Legacy: 10 PAXG ($43,724) minted $312,319 → $268,595 bad debt"** vs "OracleGuard: blocked — the ×10 feed is an outlier". Fires automatically when the legacy price deviates > 50% from the OracleGuard median.
+- [x] Bonus S1 banner (same numbers source, `docs/DEMO_SCRIPT.md` §D): stale-but-"VALID" legacy price → 31,231 rwaUSD minted vs OracleGuard RED. Fires when legacy age > 24h and state = RED.
+- [x] Live mode now reads the legacy OSM's own `zzz` for its age (it was borrowing SmartOSM's age before, which understated it)
 - **Commit:** `feat(dashboard): legacy vs OracleGuard comparison + S3 banner`
 
 ### J5. Pitch deck (≈1.5h) · `docs/PITCH.md`
@@ -76,6 +79,22 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 ---
 
 ## Progress log (newest first)
+
+### Sep 19 — J3 + J4 complete
+**Built / changed** (all inside `dashboard/`):
+| File | What |
+|---|---|
+| `src/scenarios.ts` | **new** — `Runner` interface with a mock and a live (viem test actions) implementation. Live primitives: `market()` (honest reference = the untouched Chainlink source), `setMocks()`, `warp()`, `waitForHop()`, `poke(prepare)`, `sync()`, `send()` (mines, waits, and throws on a reverted tx). Scenario steps follow `docs/DEMO_SCRIPT.md` §B. |
+| `src/components/ScenarioBar.tsx` | **new** — 8 buttons + busy state + status line (shows the revert reason on failure); takes the Reset snapshot on mount in live mode. |
+| `src/components/LegacyPanel.tsx` | **new** — J4 side-by-side + the S3 and S1 killer-moment banners. |
+| `src/data.ts` | `loadFork`/`ForkShape` exported for the runner; legacy age now from the legacy OSM's own `zzz`; mock `warp1h` now warps → refreshes → pokes → syncs, matching the live runner step for step. |
+| `src/abi/IMockSource.json`, `src/abi/IPriceSource.json` | copied from the frozen `abi/`. |
+| `src/index.css`, `src/App.tsx` | styles + wiring for the scenario bar and the comparison panel. |
+
+**Verified:** `tsc -b`, `oxlint`, `pnpm build`, `pnpm check:parity` (5/5) all clean · dev server serves the new modules · scripted run of every button through the mock world: S1 → score 0, RED, OSM STALE, **S1 banner** · S2 → Chainlink outlier, Wq 0.71, RED · S3 → legacy $43,723 vs guard $4,372, **S3 banner**, YELLOW · S4 → `cur` $3,716 with live $4,372 → GREEN + 🛡️ · Warp +1h → poke lands, OSM age back to 0.
+**Not verified:** the live (anvil) path — Foundry isn't installed on this machine, so J6 is the first real run. The live steps were written against K5's `script/DeployLib.sol` + `SmartOSM.poke` source, not against a running chain.
+
+**Next:** J5 pitch deck (`docs/PITCH.md`), then J6 go-live + video.
 
 ### Sep 19 — J1 + J2 complete, verified
 **Built / changed** (all inside `dashboard/`):

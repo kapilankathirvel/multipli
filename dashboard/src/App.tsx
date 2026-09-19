@@ -1,5 +1,7 @@
 import { ConfidenceGauge } from './components/ConfidenceGauge'
 import { EventLog } from './components/EventLog'
+import { LegacyPanel } from './components/LegacyPanel'
+import { ScenarioBar } from './components/ScenarioBar'
 import { SourcesTable } from './components/SourcesTable'
 import { StateBadge } from './components/StateBadge'
 import { StateEffects } from './components/StateEffects'
@@ -42,12 +44,20 @@ export default function App() {
         </div>
       )}
 
+      <ScenarioBar mode={snap.mode} />
+
       <div className="grid">
         <SourcesTable sources={snap.sources} />
         <ConfidenceGauge reading={snap.reading} factors={snap.factors} />
         <StateBadge osm={snap.osm} risk={snap.risk} />
         <VatPanel risk={snap.risk} />
         <StateEffects risk={snap.risk} />
+        <LegacyPanel
+          legacy={snap.legacy}
+          reading={snap.reading}
+          osm={snap.osm}
+          risk={snap.risk}
+        />
         <EventLog events={snap.events} />
       </div>
     </div>

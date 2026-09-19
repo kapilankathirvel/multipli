@@ -715,3 +715,195 @@ td.name .weight {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── J3: scenario controls ──────────────────────────────────────────────── */
+
+.scenarios {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.scenario-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: #151b25;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.08s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: #1b2330;
+  border-color: #2c3747;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+  color: #ffc2cd;
+}
+
+.btn-reset {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+  color: #f2d69a;
+}
+
+.btn-busy {
+  border-color: var(--gold);
+}
+
+.scenario-status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.scenario-failed {
+  color: #ffc2cd;
+}
+
+/* ── J4: legacy vs OracleGuard ──────────────────────────────────────────── */
+
+.legacy-panel {
+  grid-column: 1 / -1;
+}
+
+.versus {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.vs-col {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.vs-legacy {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  background: color-mix(in srgb, var(--red) 5%, transparent);
+}
+
+.vs-guard {
+  border-color: color-mix(in srgb, var(--green) 35%, var(--line));
+  background: color-mix(in srgb, var(--green) 5%, transparent);
+}
+
+.vs-title {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vs-price {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 4px 0 10px;
+}
+
+.vs-dl {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.vs-dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.vs-dl dt {
+  color: var(--muted);
+}
+
+.vs-dl dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.bad-yes {
+  color: var(--red);
+}
+
+.state-word.state-green {
+  color: var(--green);
+}
+
+.state-word.state-yellow {
+  color: var(--yellow);
+}
+
+.state-word.state-red {
+  color: var(--red);
+}
+
+.vs-note {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
+.killer {
+  margin-top: 14px;
+  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  padding: 12px 14px;
+}
+
+.killer-tag {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ffc2cd;
+  margin-bottom: 6px;
+}
+
+.killer-body {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.killer-bad {
+  color: #ffc2cd;
+}
+
+.killer-good {
+  color: var(--green);
+}
+
+@media (max-width: 900px) {
+  .versus {
+    grid-template-columns: 1fr;
+  }
+}

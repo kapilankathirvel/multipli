@@ -24,28 +24,26 @@ Open **http://localhost:5173**.
 | 4 | **Controller** | big **GREEN** badge, 🛡️ guard `OFF · liquidations open`, OSM `cur`/`nxt`, and the trigger sentence. |
 | 5 | **Vat · paxg** | debt ≈ $43,029, line $293,029 (= debt + the $250k/h GREEN gap from review §R3), headroom bar, `new borrowing: open`. |
 | 6 | **What this state changes** (review R3) | 8 rows: borrow `up to $250,000/h`, repay `always allowed`, new liquidations `open — Dog.hole = $400,000`, `Vat.line $293,029`, `Spotter.mat never touched (ADR-001)`. |
-| 7 | **Event log** | `Init` / `Synced` lines; more appear as scenarios run. |
-| 8 | top-right | pill reads **MOCK**. |
+| 7 | **Legacy OSM vs OracleGuard** (J4) | side by side: legacy price with a red **VALID** badge and `staleness check: none`, vs OracleGuard's price, score, state and OSM status. Killer-moment banner appears under it during S1 and S3. |
+| 8 | **Event log** | `Init` / `Synced` lines; more appear as scenarios run. |
+| 9 | top-right | pill reads **MOCK**; the scenario buttons sit just below the header. |
 
-### Drive the scenarios (the buttons land in J3 — until then, from the browser console)
+### Drive the scenarios (J3)
 
-In `pnpm dev` a helper is exposed on `window`. Open DevTools (F12) → Console and type:
-
-```js
-og('s1')      // stale feed      og('s2')  // market -8%
-og('s3')      // compromised     og('s4')  // captured wick
-og('poke'); og('sync'); og('warp1h'); og('reset')
-```
+The button row above the panels runs the scenarios in both modes (in mock mode it drives the
+simulation; in live mode it drives anvil). `og('s1')` etc. also still work from the DevTools
+console in `pnpm dev`.
 
 Each scenario produces:
 
 | Script | Expected |
 |---|---|
-| `s1` stale feed | warp +25h, publishers stop → all 4 stale → **no quorum**, score **0**, `PokeSkipped NO_QUORUM`, OSM **STALE**, **RED**, borrowing frozen — while **Legacy still says "valid"** at 41.5h old. |
-| `s2` market −8% | fast feeds drop, Chainlink lags → Chainlink becomes an **outlier** (✗, Wq 0.71) → **RED** via `live.lo < OSM − 1.5%`. Liquidations stay open. |
-| `s3` compromised source | Chainlink ×10 ($43,727) → rejected as an outlier, mid unchanged, score ~70 → **YELLOW**. The legacy panel is the killer moment: it *takes* the ×10 price. |
+| `s1` stale feed | warp +26h with nobody publishing → all 4 stale → **no quorum**, score **0**, `PokeSkipped NO_QUORUM`, OSM **STALE**, **RED**, borrowing frozen — while **Legacy still says "VALID"** at 41.5h old (→ S1 banner). |
+| `s2` market −8% | fast feeds drop, Chainlink lags → Chainlink becomes an **outlier** (✗, Wq 0.71) → **RED** via `live.lo < OSM − 1.5%`. No poke: the OSM is supposed to lag. Liquidations stay open. |
+| `s3` compromised source | one source ×10 ($43,723) → rejected as an outlier, mid unchanged, score ~70 → **YELLOW**. The legacy panel is the killer moment: it *takes* the ×10 price (→ S3 banner). |
 | `s4` captured wick | all sources −15%, two pokes push the wick into `cur` ($3,716), market recovers to $4,372 → 🛡️ **guard ON** (`Dog.hole = 0`, max 6h) while the state stays GREEN. |
-| `poke` / `sync` / `warp1h` | mirror `SmartOSM.poke()` (quorum → jump quarantine → `cur ← nxt`), the controller's `sync(ilk)`, and `evm_increaseTime(3600)`. Two warps without a poke → OSM age > 2h → **STALE → RED**. |
+| `poke` / `sync` / `warp1h` | `poke` = wait for the hop → refresh the sources → `SmartOSM.poke()`; `sync` = `RiskController.sync(paxg)`; `warp1h` = `evm_increaseTime(3600)` → refresh → poke → sync. |
+| `reset` | live: `evm_revert` to the snapshot taken on page load, then re-snapshot. Mock: reseeds the world. |
 
 ## 2. Checks you can run
 
@@ -74,10 +72,22 @@ copy ..\deployments\fork.json public\fork.json
 pnpm dev --mode live      # or put VITE_MODE=live in dashboard/.env (see .env.example)
 ```
 
-Live mode reads: `aggregator.read()` / `observations()` / `sourceCount()` / `sourceAt(i)`,
-`smartOsm.price()/status()/age()`, `controller.status(ilk)`, `vat.ilks(ilk)`, the legacy OSM's
-slot 3, and decodes `Poke / PokeSkipped / Quarantined / StateChanged / GuardOn / GuardOff / Synced`.
+**Reads:** `aggregator.read()` / `observations()` / `sourceCount()` / `sourceAt(i)`,
+`smartOsm.price()/status()/age()/zzz()/hop()/pass()`, `controller.status(ilk)`, `vat.ilks(ilk)`,
+the legacy OSM's slot 3 + its `zzz`, and it decodes
+`Poke / PokeSkipped / Quarantined / StateChanged / GuardOn / GuardOff / Synced`.
 Ages use **chain** time, so time warps don't break them.
+
+**Writes** (scenario buttons only): `MockSource.setPrice` on the three mock feeds — sent from
+**anvil account #0** (`0xf39F…2266`, the deployer and therefore their ward), impersonated so no
+private key sits in the repo — plus the permissionless `SmartOSM.poke()` and
+`RiskController.sync(paxg)`, and the anvil test RPCs `evm_snapshot / evm_revert / evm_increaseTime /
+evm_mine`. It never touches the Maker core directly.
+
+Two ordering rules the runner enforces (learned in K3):
+1. `poke()` reverts `OSM/not-passed` until `zzz + hop`, so it warps to the next hop first;
+2. the mocks have a **1h maxAge**, so they are refreshed *after* that warp and immediately before
+   the poke — refreshing earlier would re-stale them and the poke would be skipped.
 
 Without a real `fork.json` it falls back to the placeholder addresses in `src/fork.example.json`
 and shows a red error banner over the last mock snapshot — that is expected.
@@ -87,12 +97,14 @@ and shows a red error banner over the last mock snapshot — that is expected.
 ```
 src/protocol.ts     score formula + state machine (mirrors the contracts; no React, no viem)
 src/data.ts         types, mock simulation, live viem provider, formatting
+src/scenarios.ts    J3 runner: mock scripts / viem test actions against anvil
 src/useOracle.ts    React hook over the provider
 src/components/*    one file per panel
 scripts/parity.mjs  review.md §R1.4 parity vectors
 ```
 
-## What's not here yet
+## Status
 
-J3 scenario buttons (Reset / S1–S4 / Poke / Sync / Warp) and J4's legacy-vs-OracleGuard panel.
-The data layer is ready for both: `provider.applyScript('s1')` already drives the mock world.
+J1–J4 done. **The live path has never run against a real anvil fork** (Foundry isn't installed on
+this machine), so budget a few minutes at the start of J6 to shake it out. Left: J5 (`docs/PITCH.md`)
+and J6 (go live + video).

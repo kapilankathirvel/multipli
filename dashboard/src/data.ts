@@ -120,12 +120,14 @@ const BASE_PRICE = 4372.478
 const START_DEBT = 43_029
 const POLL_MS = 2000
 
-type ForkShape = {
+export type ForkShape = {
   rpc: string
+  snapshotId?: string
   oracleguard: {
     aggregator: string
     smartOsm: string
     controller: string
+    /** written by script/Deploy.s.sol: chainlink | pyth | redstone | dexTwap */
     sources?: Record<string, string>
   }
   maker: {
@@ -402,9 +404,11 @@ function applyMockScript(w: MockWorld, script: MockScriptName): MockWorld {
     }
 
     case 'warp1h': {
+      // same steps as the live runner: warp -> refresh the sources (1h maxAge) -> poke -> sync
       w.warp += P.hopSec
       w.events = pushEvent(w.events, 'Warp', '+1h (evm_increaseTime)')
       advanceFeeds(w)
+      pokeOsm(w, reading())
       syncState(w, reading(), false)
       return w
     }
@@ -479,7 +483,7 @@ function decodeReason(reason: number): string {
   return { 1: 'NO_QUORUM', 2: 'AGGREGATOR_FAILED' }[reason] ?? `code=${reason}`
 }
 
-async function loadFork(): Promise<ForkShape> {
+export async function loadFork(): Promise<ForkShape> {
   try {
     const res = await fetch('/fork.json')
     if (res.ok) return (await res.json()) as ForkShape
@@ -616,6 +620,12 @@ async function readLive(
         .catch(() => []),
     ])
 
+  // the legacy OSM is a Maker OSM: `zzz` is the last accepted update, so its true age
+  // is independent of SmartOSM's (this is what "VALID forever" looks like)
+  const legacyZzz = (await client
+    .readContract({ address: legacyOsm, abi: osmAbi, functionName: 'zzz' })
+    .catch(() => 0n)) as bigint
+
   // chain time, not wall time: the fork is warped around by the scenario buttons
   const now = Number(block.timestamp)
   const [obsList, fresh, inlier] = obs
@@ -698,7 +708,7 @@ async function readLive(
     legacy: {
       price: legacy.price,
       valid: legacy.valid,
-      ageHours: Number(age) / 3600,
+      ageHours: legacyZzz > 0n ? Math.max(0, now - Number(legacyZzz)) / 3600 : Number(age) / 3600,
     },
     events,
     mode: 'live',

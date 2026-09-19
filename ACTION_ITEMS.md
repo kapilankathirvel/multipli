@@ -37,9 +37,10 @@
 - [ ] Tell **Varun**: `script/Deploy.s.sol` + `script/Spell.s.sol` now exist and are tested on anvil, so his `demo-up` script can call them for real (exact commands in the header comments of each script). `deployments/fork.json` is written by Deploy (gitignored).
 - [ ] Tell **Jeffrey**: he can switch to live mode any time. Run anvil + Deploy + Spell (or Varun's demo-up); MockSources are controlled by anvil account #0.
 
-### Dashboard (Jeffrey, added Sep 19 — J1/J2)
-- [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1. Drive the scenarios from DevTools: `og('s1')`, `og('s2')`, `og('s3')`, `og('s4')`, `og('reset')`.
-- [ ] (Kapilan) The dashboard's live mode names the feeds from a `oracleguard.sources` map in `deployments/fork.json` whose **keys** are `chainlink`/`pyth`/`redstone`/`dexTwap` (or `mockA/B/C`), as in `fork.example.json`. If `Deploy.s.sol` writes different keys, tell Jeffrey — otherwise the table silently falls back to slot order.
+### Dashboard (Jeffrey, added Sep 19 — J1–J4)
+- [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1, then click every scenario button (Reset · S1–S4 · Poke · Sync · Warp).
+- [ ] ⚠️ **The live (anvil) path of the scenario buttons has never been run** — Foundry isn't installed on this machine, so J3 was verified in mock mode only. First thing in J6 (or whenever anvil is up): `demo-up` → `VITE_MODE=live` → click through Reset/S1–S4 and fix whatever the status line reports. Budget ~15 min.
+- [ ] (Kapilan) Live mode drives the demo by sending `MockSource.setPrice` from **anvil account #0** (impersonated). If the deploy ever stops leaving account #0 as the mocks' ward, the buttons stop working — tell Jeffrey.
 
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
@@ -48,6 +49,7 @@
 - [ ] (added Sep 19, design) Would they adopt a timelock on oracle config (our finding V5)?
 
 ## ✅ Done
+- [x] (added Sep 19, J1/J2) Check the `oracleguard.sources` key names the dashboard relies on ✅ Sep 19: `script/Deploy.s.sol` writes exactly `chainlink` / `pyth` / `redstone` / `dexTwap`, which is what `src/data.ts` and `src/scenarios.ts` expect. No change needed.
 - [x] (added Sep 19, J1/J2) Commit the dashboard (`dashboard/` was untracked) ✅ Sep 19: commit `feat(dashboard): scaffold with mock/live data layer + Oracle War Room panels (mentor review R1/R3)`
 - [x] (added Sep 19, J1/J2) Confirm the R3 controller numbers hard-coded in `dashboard/src/protocol.ts` match the real deploy ✅ Sep 19: checked against K5's `script/DeployLib.sol` — greenGap 250,000 · yellowGap 50,000 · greenScore 80 · yellowScore 50 · epsBps 150 · epsLiqBps 300 · guard 6h · refill 1h · weights 2/2/2/1 (25h/1h/1h/1h) all identical. Re-check if `setIlk` config changes.
 - [x] (added Sep 19) Push Phase 1 to github.com/kapilankathirvel/multipli ✅ Sep 19: pushed by Kapilan
