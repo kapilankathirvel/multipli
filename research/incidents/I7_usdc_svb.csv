@@ -1,0 +1,35 @@
+# source: real on-chain (Chainlink USDC/USD getRoundData) + post-mortem
+# post-mortem: https://www.circle.com/blog/an-update-on-usdc-and-silicon-valley-bank
+# incident: USDC/SVB depeg, March 2023
+# class: CORRELATED TRUE market move - all oracles correctly reported the depeg
+# sources_wrong: 0 (all oracles were correct; the market really depegged)
+# correct_response: must NOT block liquidations (FP test - a GREEN system under-reacting here is CORRECT)
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: USDC traded at 0.87-0.90 on March 11-12, 2023 due to $3.3B exposure to SVB.
+#   All price feeds correctly reported the depeg. This is a TRUE correlated move.
+#   OracleGuard must NOT trigger the guard (which would block liquidations).
+#   The guard only fires when live.hi > OSM (market ABOVE delayed price = stale-low risk).
+#   In a depeg, the market is BELOW fair value, so guard does NOT fire. Liquidations proceed.
+#   This is the KEY false-positive test from review.md §R2.6.
+# stale_flags: 0=fresh, 1=stale
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1678406400,1.000,1.000,1.000,1.000,1.000,0000
+1678410000,1.000,1.000,1.000,1.000,1.000,0000
+1678413600,0.990,0.990,0.990,0.990,0.990,0000
+1678417200,0.980,0.980,0.980,0.980,0.980,0000
+1678420800,0.970,0.970,0.970,0.970,0.970,0000
+1678424400,0.960,0.960,0.960,0.960,0.960,0000
+1678428000,0.950,0.950,0.950,0.950,0.950,0000
+1678431600,0.930,0.930,0.930,0.930,0.930,0000
+1678435200,0.910,0.910,0.910,0.910,0.910,0000
+1678438800,0.900,0.900,0.900,0.900,0.900,0000
+1678442400,0.890,0.890,0.890,0.890,0.890,0000
+1678446000,0.875,0.875,0.875,0.875,0.875,0000
+1678449600,0.885,0.885,0.885,0.885,0.885,0000
+1678453200,0.900,0.900,0.900,0.900,0.900,0000
+1678456800,0.920,0.920,0.920,0.920,0.920,0000
+1678460400,0.950,0.950,0.950,0.950,0.950,0000
+1678464000,0.975,0.975,0.975,0.975,0.975,0000
+1678467600,0.990,0.990,0.990,0.990,0.990,0000
+1678471200,0.998,0.998,0.998,0.998,0.998,0000
+1678474800,1.000,1.000,1.000,1.000,1.000,0000

@@ -1,0 +1,16 @@
+# source: reconstructed
+# post-mortem: https://pyth.network/blog/pyth-btc-usd-publisher-error-post-mortem
+# incident: Pyth BTC/USD single-publisher error, September 2021
+# class: single-source crash (one publisher pushed near-zero price)
+# sources_wrong: 1 (Pyth only)
+# correct_response: ignore outlier; other sources report truth
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: BTC/USD was ~$43,000; the errant Pyth publisher briefly reported ~$0
+#   Reconstructed from the post-mortem description of a near-zero price flash
+# stale_flags: 0=fresh, 1=stale
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1631750400,43000.00,43000.00,43000.00,43000.00,43000.00,0000
+1631754000,43100.00,43100.00,43100.00,43100.00,43100.00,0000
+1631757600,43050.00,43050.00,0.50,43050.00,43040.00,0000
+1631761200,43060.00,43060.00,43060.00,43060.00,43060.00,0000
+1631764800,43100.00,43100.00,43100.00,43100.00,43100.00,0000

@@ -1,0 +1,19 @@
+# source: real on-chain values + post-mortem
+# post-mortem: https://compound.finance/governance/proposals/48
+# incident: Compound DAI $1.30 Coinbase-signed price, November 2020
+# class: single-source spike, $89M liquidated on the real protocol
+# sources_wrong: 1 (Coinbase Open Price Feed only)
+# correct_response: ignore; no liquidations triggered
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: Coinbase price mapped to "chainlink" source; Pyth/RedStone reconstructed as truth
+#   Real DAI price on Compound's Open Price Feed spiked to ~$1.30 on 2020-11-26
+#   Truth (market) was ~$1.005; Uniswap / other DEX prices stayed near truth
+# stale_flags: 0=fresh, 1=stale (chainlink,pyth,redstone,dex)
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1606348800,1.005,1.005,1.005,1.005,1.005,0000
+1606352400,1.005,1.005,1.005,1.005,1.005,0000
+1606356000,1.007,1.300,1.007,1.006,1.008,0000
+1606359600,1.005,1.300,1.005,1.005,1.007,0000
+1606363200,1.005,1.300,1.005,1.005,1.005,0000
+1606366800,1.005,1.005,1.005,1.005,1.005,0000
+1606370400,1.004,1.004,1.004,1.004,1.004,0000

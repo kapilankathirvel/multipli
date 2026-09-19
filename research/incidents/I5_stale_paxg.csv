@@ -1,0 +1,28 @@
+# source: reconstructed from real Chainlink PAXG/USD heartbeat history
+# incident: Stale-feed outage - PAXG Chainlink heartbeat gap (synthetic on real history)
+# class: staleness (1 to all sources stale progressively)
+# sources_wrong: 1 ... all (synthetic progression)
+# correct_response: YELLOW when 1 stale, RED when all stale
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: PAXG/USD Chainlink has a 24h heartbeat (quiet market). 
+#   In low-vol periods, the feed can go 20+ hours without an update.
+#   This trace simulates a weekend gap where all sources eventually go stale.
+#   Truth price taken as the last known gold price: $1900 (approximate 2023 level).
+# stale_flags: comma-separated 0/1 per source (chainlink,pyth,redstone,dex)
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1688169600,1900.0,1900.0,1900.0,1900.0,1900.0,0000
+1688173200,1901.0,1901.0,1901.0,1901.0,1900.5,0000
+1688176800,1901.5,1901.0,1901.0,1901.0,1901.0,0000
+1688180400,1902.0,1901.0,1902.0,1902.0,1902.0,0000
+1688184000,1902.5,1901.0,1901.0,1901.0,1901.0,1000
+1688187600,1903.0,1901.0,1901.0,1901.0,1901.0,1000
+1688191200,1903.5,1901.0,1903.5,1903.5,1903.0,1000
+1688194800,1904.0,1901.0,1901.0,1901.0,1901.0,1100
+1688198400,1904.5,1901.0,1901.0,1904.5,1903.0,1100
+1688202000,1905.0,1901.0,1901.0,1901.0,1901.0,1110
+1688205600,1905.5,1901.0,1901.0,1901.0,1901.0,1110
+1688209200,1906.0,1901.0,1901.0,1901.0,1901.0,1111
+1688212800,1906.5,1901.0,1901.0,1901.0,1901.0,1111
+1688216400,1907.0,1901.0,1901.0,1901.0,1901.0,1111
+1688220000,1907.5,1901.0,1901.0,1901.0,1901.0,1111
+1688223600,1908.0,1908.0,1908.0,1908.0,1908.0,0000
