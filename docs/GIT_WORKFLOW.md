@@ -18,7 +18,7 @@ Teammates: add them on github.com → multipli → Settings → Collaborators. T
 
 ## Team rules (3 people pushing to `main`)
 - Everyone works on `main` but **only edits files they own** (ownership lists in `kapilan.md`, `varun.md`, `jeffrey.md`), so conflicts stay rare.
-- **Always pull before you push:** `git pull --rebase origin main`.
+- **Order matters: commit → pull --rebase → push.** `git pull --rebase` refuses to run while you have uncommitted changes ("cannot pull with rebase: You have unstaged changes"), so always commit first. If a push is rejected ("non-fast-forward"), a teammate pushed first: run `git pull --rebase origin main`, then `git push` again.
 - If a rebase conflict happens: fix the file, then `git add <file>` and `git rebase --continue`. If you're lost, `git rebase --abort` and ask Kapilan.
 - Contracts: run `forge test` before pushing. Dashboard: run `pnpm build`.
 
@@ -28,9 +28,9 @@ Teammates: add them on github.com → multipli → Settings → Collaborators. T
 cd "C:\Users\Kapilan Kathirvel\Desktop\multipli"
 cd contracts && forge test && cd ..      # only push green code
 git status                               # review what changed
-git pull --rebase origin main            # get teammates' work first
 git add -A
 git commit -m "<message from the table below / from your <name>.md>"
+git pull --rebase origin main            # AFTER committing: replay your commit on top of teammates' work
 git push
 ```
 

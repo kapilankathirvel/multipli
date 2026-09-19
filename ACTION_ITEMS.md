@@ -7,6 +7,7 @@
 ## 🔴 Open
 
 ### Understand before continuing (added Sep 19)
+- [ ] **Start with `START_HERE.md`**: study order (Part A), foundations (Part B), 20-question self-test (Part C). ≈ 5h total to be review-ready.
 - [ ] Read `SOLUTION_EXPLAINED.md` (≈30 min): big picture, limitations, 2-min pitch, tough Q&A.
 - [ ] Read `IMPLEMENTATION_EXPLAINED.md` (≈30 min): every contract and test, with numbers.
 - [ ] Read `FLOW_EXPLAINED.md` (≈25 min): one price followed through every component, with real numbers. Section 14 is the 10-line summary to memorise.
