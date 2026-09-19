@@ -58,6 +58,10 @@
 - [ ] (Kapilan) Live mode drives the demo by sending `MockSource.setPrice` from **anvil account #0** (impersonated). If the deploy ever stops leaving account #0 as the mocks' ward, the buttons stop working — tell Jeffrey.
 - [ ] (Jeffrey, from K6b) Put the `review.md` §R2.4b replay table on the mentor "validation" slide in J5 — it replaces the placeholder. (The mock's quarantine already follows ADR-011: asymmetric, `cur` keeps advancing.)
 
+### FLOW_EXPLAIN_2.md (Jeffrey, added Sep 19)
+- [ ] Open `FLOW_EXPLAIN_2.md` on GitHub and check that the Mermaid diagram (§2.1) renders. If it doesn't, use the ASCII version (§2.2) on the slides.
+- [ ] (Kapilan) Check the judge-facing doc `FLOW_EXPLAIN_2.md` against the contracts. It reuses the numbers from `review.md` §R2.4b and `FLOW_EXPLAINED.md`; update it too if parameters change. Items marked 🗺️ (real TWAP + liquidity floor, round-TWAP poke, challenge window, paid keepers, fundamental anchor/PoR, timelock) are roadmap and must not be demoed as built.
+
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
 - [ ] (added Sep 19, design) Who pokes the OSM/Spotter in production, and how often?
