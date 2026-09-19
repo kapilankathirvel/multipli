@@ -2,64 +2,57 @@
 
 > **Full guide:** [`DASHBOARD.md`](DASHBOARD.md) — every panel, every button, why it exists, and the end-to-end run on a real mainnet fork.
 
-React 19 + Vite + viem + Tailwind + Recharts. **Mock mode needs no chain** — it runs a small
-simulation of the aggregator + controller (`src/protocol.ts`), so the panels show derived numbers,
-not canned ones. Live mode polls Kapilan's anvil fork every 2s.
+React 19 + Vite + viem + Tailwind. Two modes:
 
-## 1. Run it (J1 + J2, mock — do this now)
+- **Mainnet data (default):** real Chainlink / Pyth / RedStone / Uniswap-TWAP prices, the real
+  rwaUSD `Vat`, `Spotter` and legacy OSM, read from Ethereum mainnet every 6s. OracleGuard isn't
+  deployed on mainnet, so its logic (`src/protocol.ts`) runs in the page on top of those real inputs.
+  Needs internet, no local chain.
+- **Local fork:** an anvil fork with OracleGuard deployed + installed by the spell, polled every 2s.
+
+## 1. Run it
 
 ```bash
 cd dashboard
-pnpm install     # already done on this machine
-pnpm dev
+pnpm install
+pnpm dev          # mainnet data -> http://localhost:5173
 ```
 
-Open **http://localhost:5173**.
+Top to bottom: scenario buttons (hover one to see what it does), status card (state, score, why,
+guard, the price vaults are valued at), confidence score as a sum of points, price sources, borrowing
+(debt / ceiling / room), legacy OSM vs OracleGuard, and a collapsed event log. Every panel is
+explained in [`DASHBOARD.md` §4](DASHBOARD.md).
 
-### What you should see
+**Score:** `score = ⌊50·Wq + 30·Wd + 20·Wf⌋ − volatility penalty` (0 without quorum).
+GREEN ≥ 80 · YELLOW 40–79 · RED < 40.
 
-| # | Panel | Check |
-|---|---|---|
-| 1 | **Sources** | 4 feeds (Chainlink / Pyth / RedStone / DEX TWAP), prices ticking every 2s, `fresh`/`inlier` pills green. Chainlink sits ~16.5h old on purpose (it's a deviation feed, `maxAge 25h`). |
-| 2 | **Sources → Contribution** (review R1) | a weight-share bar per feed: **28.6 / 28.6 / 28.6 / 14.3 %** with a green ✓. Header reads `4/4 counted · 100.0% of weight`. |
-| 3 | **Confidence** | gauge 0–100 (≈97–100 at idle), lo–mid–hi band, and the line `score = ⌊100 · Wq · Wd · Wf⌋ = ⌊100 · 1.00 · 0.98 · 1.00⌋ = 97` with three factor bars. |
-| 4 | **Controller** | big **GREEN** badge, 🛡️ guard `OFF · liquidations open`, OSM `cur`/`nxt`, and the trigger sentence. |
-| 5 | **Vat · paxg** | debt ≈ $43,029, line $293,029 (= debt + the $250k/h GREEN gap from review §R3), headroom bar, `new borrowing: open`. |
-| 6 | **What this state changes** (review R3) | 8 rows: borrow `up to $250,000/h`, repay `always allowed`, new liquidations `open — Dog.hole = $400,000`, `Vat.line $293,029`, `Spotter.mat never touched (ADR-001)`. |
-| 7 | **Legacy OSM vs OracleGuard** (J4) | side by side: legacy price with a red **VALID** badge and `staleness check: none`, vs OracleGuard's price, score, state and OSM status. Killer-moment banner appears under it during S1 and S3. |
-| 8 | **Event log** | `Init` / `Synced` lines; more appear as scenarios run. |
-| 9 | top-right | pill reads **MOCK**; the scenario buttons sit just below the header. |
+### Scenarios (both modes)
 
-### Drive the scenarios (J3)
-
-The button row above the panels runs the scenarios in both modes (in mock mode it drives the
-simulation; in live mode it drives anvil). `og('s1')` etc. also still work from the DevTools
-console in `pnpm dev`.
-
-Each scenario produces:
-
-| Script | Expected |
+| Button | What happens |
 |---|---|
-| `s1` stale feed | warp +26h with nobody publishing → all 4 stale → **no quorum**, score **0**, `PokeSkipped NO_QUORUM`, OSM **STALE**, **RED**, borrowing frozen — while **Legacy still says "VALID"** at 41.5h old (→ S1 banner). |
-| `s2` market −8% | fast feeds drop, Chainlink lags → Chainlink becomes an **outlier** (✗, Wq 0.71) → **RED** via `live.lo < OSM − 1.5%`. No poke: the OSM is supposed to lag. Liquidations stay open. |
-| `s3` compromised source | one source ×10 ($43,723) → rejected as an outlier, mid unchanged, score ~70 → **YELLOW**. The legacy panel is the killer moment: it *takes* the ×10 price (→ S3 banner). |
-| `s4` captured wick | all sources −15%, two pokes push the wick into `cur` ($3,716), market recovers to $4,372 → 🛡️ **guard ON** (`Dog.hole = 0`, max 6h) while the state stays GREEN. |
-| `poke` / `sync` / `warp1h` | `poke` = wait for the hop → refresh the sources → `SmartOSM.poke()`; `sync` = `RiskController.sync(paxg)`; `warp1h` = `evm_increaseTime(3600)` → refresh → poke → sync. |
-| `reset` | live: `evm_revert` to the snapshot taken on page load, then re-snapshot. Mock: reseeds the world. |
+| S1 stale feed | publishers stop, +26h → every source stale → no quorum → score 0, OSM STALE, **RED**; legacy still "VALID" (S1 banner) |
+| S2 market −8% | fast feeds −8%, Chainlink lags → Chainlink is an outlier → **RED** via `live.lo < OSM − 1.5%`; liquidations stay open |
+| S3 compromised | Chainlink ×10 → rejected as an outlier, price unchanged; legacy takes the ×10 price (S3 banner) |
+| S4 captured wick | every feed −15% for two hops → the dip becomes `cur`, market recovers → 🛡️ guard ON (`Dog.hole = 0`) |
+| Poke | `SmartOSM.poke()`: waits for the hourly hop, `nxt` → `cur`, the new median becomes `nxt` |
+| Sync | `RiskController.sync(paxg)`: re-evaluates the state, sets the debt ceiling and the guard |
+| Warp +1h | moves the clock one hour, then poke + sync |
+| Reset | mainnet: clears every fault · fork: `evm_revert` to the snapshot taken on page load |
+
+`og('s3')` etc. also work from the DevTools console.
 
 ## 2. Checks you can run
 
 ```bash
-cd dashboard
-pnpm check:parity   # review.md §R1.4 vectors: V-a 100, V-b 85, V-c 71, V-d 75, V-e 0  -> all PASS
+pnpm check:parity   # review.md §R1.4 vectors with the additive score: 100, 92, 85, 92, 70 + V-e quarantined
 pnpm build          # tsc -b + vite build, must be clean
 pnpm lint
 ```
 
-`check:parity` is the important one: it proves the formula the dashboard displays is the same one
-`OracleGuardAggregator.sol` implements (and the one Varun's Python model is checked against).
+The deployed `OracleGuardAggregator.sol` still multiplies (`100·Wq·Wd·Wf`) until it is ported;
+`parity.mjs` prints both numbers per vector.
 
-## 3. Live mode (after the integration checkpoint)
+## 3. Fork mode
 
 1. Bring up the fork and install OracleGuard — exact commands in [`DASHBOARD.md` §7.2](DASHBOARD.md) (anvil → `Deploy.s.sol --slow` → `Spell.s.sol --slow`), or Varun's `scripts/demo-up` once it lands. That writes `deployments/fork.json`.
 2. Copy it into the dashboard's static folder:
@@ -71,7 +64,7 @@ copy ..\deployments\fork.json public\fork.json
 3. Start the UI against anvil:
 
 ```bash
-pnpm dev --mode live      # use the URL Vite prints (moves to :5174 if :5173 is busy)
+pnpm dev --mode live      # VITE_MODE=fork; use the URL Vite prints (moves to :5174 if :5173 is busy)
 ```
 
 **Reads:** `aggregator.read()` / `observations()` / `sourceCount()` / `sourceAt(i)`,
@@ -94,17 +87,18 @@ Two ordering rules the runner enforces (learned in K3):
    the poke — refreshing earlier would re-stale them and the poke would be skipped.
 
 Without a real `fork.json` it falls back to the placeholder addresses in `src/fork.example.json`
-and shows a red error banner over the last mock snapshot — that is expected.
+and shows a red error banner — that is expected.
 
 ## Layout of the code
 
 ```
-src/protocol.ts     score formula + state machine (mirrors the contracts; no React, no viem)
-src/data.ts         types, mock simulation, live viem provider, formatting
-src/scenarios.ts    J3 runner: mock scripts / viem test actions against anvil
+src/protocol.ts     additive score + state machine (no React, no viem)
+src/mainnet.ts      real mainnet reads (feeds, Vat, Spotter, legacy OSM)
+src/data.ts         types, mainnet provider (real inputs + modelled OracleGuard), fork provider, formatting
+src/scenarios.ts    button runner: faults on the mainnet world / viem test actions against anvil
 src/useOracle.ts    React hook over the provider
 src/components/*    one file per panel
-scripts/parity.mjs  review.md §R1.4 parity vectors
+scripts/parity.mjs  review.md §R1.4 vectors (additive score)
 ```
 
 ## Status

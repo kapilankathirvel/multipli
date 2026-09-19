@@ -82,6 +82,20 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 
 ## Progress log (newest first)
 
+### Sep 19 — Dashboard v2: real mainnet data, additive score, decluttered
+**Why:** the old default (mock) mode seeded hard-coded numbers ($4,372.48 = the legacy OSM price at the fork block, debt $43,029), the layout had 8 overlapping panels, and the team switched the score to a sum.
+| Change | Where |
+|---|---|
+| **Mainnet mode (new default)** replaces mock: real Chainlink, Pyth (on-chain), RedStone (API), Uniswap v3 PAXG/USDC 30-min TWAP, real `Vat` / `Spotter.mat` / legacy OSM, every 6s. OracleGuard is modelled in the page on those inputs; scenario buttons apply faults on top of the real feeds; no fallback to fake data | `src/mainnet.ts` (new), `src/data.ts` |
+| **Additive score** `⌊50·Wq + 30·Wd + 20·Wf⌋ − volPenalty`, thresholds **80 / 40**; Wd = 0 when nothing counts | `src/protocol.ts`, `scripts/parity.mjs` (new vectors 100/92/85/92/70 + V-e quarantine check) |
+| **Fork mode** (`--mode live`, `VITE_MODE=fork`) shows the new score and flags when the deployed contract (still a product) disagrees; reads `Spotter.mat` | `src/data.ts` |
+| **Layout:** status card · score card (sum shown as points) · sources · borrowing (Vat + effects merged, plain-word labels) · legacy · collapsible event log. Removed `ConfidenceGauge`, `StateBadge`, `VatPanel`, `StateEffects`, Recharts | `src/components/*`, `src/index.css`, `src/App.tsx` |
+| Legacy banners **derived** (10 PAXG × price ÷ `mat`) instead of hard-coded | `LegacyPanel.tsx` |
+| Scenario hints shown on hover; buttons grouped "scenarios" / "step by hand" | `ScenarioBar.tsx`, `scenarios.ts` |
+
+**Verified:** `tsc -b`, `oxlint`, `pnpm build`, `pnpm check:parity` (5/5 + quarantine) clean. Mainnet mode in Chrome against block ~26,013,200: real prices, Pyth genuinely stale (111 days) → score 85 GREEN; all 8 buttons (S1 RED/STALE + banner $31,232 · S2 RED · S3 YELLOW + banner · S4 🛡️ cur $3,710 · Poke/Sync/Warp/Reset). Fork mode on a fresh anvil + Deploy + Spell: all 11 steps. S3 banner reproduces Baseline ($312,320 vs $43,725 → $268,595); S3 shows the chain's YELLOW (product 71) against the new score 85, with the "contract still multiplies" note.
+**Open:** contract port of the score (Kapilan, `ACTION_ITEMS.md`), S3 narrative now GREEN under the sum.
+
 ### Sep 19 — Foundry installed, live end-to-end verified, `DASHBOARD.md`
 **Tooling:** Foundry **v1.5.1** (same as Kapilan) installed from the official `foundry-rs/foundry` release to `%USERPROFILE%\.foundry\bin`, added to the user PATH; zip SHA-256 checked against GitHub's recorded digest. solc 0.8.24 auto-downloaded on first build. No other chain tooling needed.
 

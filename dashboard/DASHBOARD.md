@@ -57,144 +57,97 @@ The dashboard only ever **writes** through the same permissionless/keeper paths 
 
 ## 3. Two data modes
 
-The top-right pill tells you which mode you're in.
+The pill in the top-right corner shows the mode and the block number the page last read. The line under the header says in plain words where the numbers come from.
 
-### MOCK (default)
-- No chain needed. `pnpm dev` and go.
-- It's **a simulation, not canned screenshots.** `src/protocol.ts` is a TypeScript mirror of `OracleGuardAggregator.sol` and the `review.md` §R3 controller rules. Scenarios only move the *feeds* (price, freshness, liveness); score, state, `Vat.line`, and the guard are all *derived* by the same formula the contracts use. So the numbers on screen are always internally consistent.
-- `pnpm check:parity` proves the TS formula matches the contract: it reproduces all five worked vectors from `review.md` §R1.4 (V-a 100, V-b 85, V-c 71, V-d 75, V-e 0).
-- Use it for: design work, rehearsing the pitch, a fallback if the fork dies on stage.
+### MAINNET (default: `pnpm dev`)
+- **Real inputs, read every 6s from Ethereum mainnet** (public RPC `ethereum-rpc.publicnode.com`, override with `VITE_MAINNET_RPC_URL`). `src/mainnet.ts`:
 
-### LIVE
-- Talks to an **anvil fork of Ethereum mainnet at block 26,011,000**, with OracleGuard deployed and installed by the governance spell — i.e. the real rwaUSD `Vat`, `Spotter`, `Dog`, legacy OSM, and the real Chainlink PAXG/USD feed.
-- Polls every 2 seconds. All ages use **chain time**, so time warps show up correctly.
-- Addresses come from `dashboard/public/fork.json` (a copy of `deployments/fork.json`, written by `script/Deploy.s.sol`). Without it, the app falls back to placeholder addresses and shows a red error banner — that's expected.
-- Use it for: the real demo and the video (J6).
+| Source row | Where the number comes from |
+|---|---|
+| Chainlink | `latestRoundData()` on the real PAXG/USD feed `0x9944…f8C3` (price + `updatedAt`) |
+| Pyth | `getPriceUnsafe(PAXG/USD)` on the Pyth contract `0x4305…69C6`: the **last price someone pushed on-chain**. Pyth is a pull oracle and nobody pushes PAXG on Ethereum, so it is genuinely ~110 days old and shows **stale**. That's a real finding, not a bug (Pyth's off-chain Hermes API now requires an API key). |
+| RedStone | RedStone's public price API (`api.redstone.finance`, `redstone-primary-prod`), price + timestamp |
+| DEX TWAP | 30-minute TWAP from the Uniswap v3 PAXG/USDC 0.05% pool `0x5aE1…4082` (`observe([1800, 0])`), USDC ≈ USD |
+| Vat · paxg | the real `Vat.ilks("paxg")`: debt = `Art × rate`, ceiling = `line` |
+| Legacy OSM | the real legacy OSM: slot 3 (`cur` + `has`) and `zzz` |
+| `mat` | the real `Spotter.ilks("paxg").mat` (1.40) |
 
-Switch with `pnpm dev` (mock) vs `pnpm dev --mode live` (reads `.env.live`: `VITE_MODE=live`, `VITE_RPC_URL=http://127.0.0.1:8545`).
+- **OracleGuard is not deployed on mainnet**, so its logic (aggregator, SmartOSM, RiskController) runs in the page (`src/protocol.ts` + the `World` in `src/data.ts`) on top of those real inputs. It starts like the spell: SmartOSM primed from the legacy OSM's price. A simulated keeper pokes once per hour, like production.
+- **Scenario buttons never invent prices.** They put a fault *on top of* the real feeds: stop the publishers and move the clock (S1), multiply the fast feeds by 0.92 (S2), multiply Chainlink by 10 (S3), dip every feed by 15% for two hops (S4). Reset removes every fault.
+- If a read fails, that source shows `no data` (like a source adapter returning `ok = false`); if the whole RPC fails, a red banner says so. There is no fallback to fake numbers.
+
+### FORK (`pnpm dev --mode live`)
+- Talks to an **anvil fork of Ethereum mainnet at block 26,011,000** with OracleGuard deployed and installed by the governance spell: the real rwaUSD `Vat`, `Spotter`, `Dog`, legacy OSM and Chainlink feed, plus three `MockSource`s the buttons control.
+- Polls every 2 seconds. All ages use **chain time**, so time warps show up.
+- Addresses come from `dashboard/public/fork.json` (a copy of `deployments/fork.json`).
+- **Score:** the page shows the agreed additive score, recomputed from the chain's `observations()`. Until Kapilan ports it, the deployed aggregator still multiplies, so the score card shows *"The deployed contract still multiplies the factors (score N)"* whenever the two differ, and the status card says the state was *"set on-chain by the RiskController"* when the chain's state differs from what the new score would give.
+- Use it for the video (J6): these are real transactions against real Maker contracts.
+
+`.env.development` sets `VITE_MODE=mainnet`; `.env.live` sets `VITE_MODE=fork` (the old value `live` still works).
 
 ---
 
 ## 4. The screen, panel by panel
 
 ### 4.1 Header
-- **Title + `OracleGuard · rwaUSD · ilk paxg`** — one collateral type, PAXG (tokenised gold). `paxg` is the ilk name on-chain (bytes32, not `PAXG-A`).
-- **Mode pill** — `MOCK` or `LIVE`.
-- **`poll 2s · updated HH:MM:SS`** — wall-clock time of the last successful read. If this stops advancing in live mode, anvil is down.
-- **Red banner** (live only) — the RPC read failed; the panels show a mock snapshot underneath so the layout doesn't collapse. The message is the raw viem error.
+Title, the mode pill (`Mainnet data · block N` or `Local fork · block N`), the time of the last successful read, and one sentence saying where the numbers come from. A red banner appears only when a read fails.
 
-### 4.2 Scenario bar (buttons)
-Eight buttons plus a status line. Detailed in **§5**. Red-bordered buttons are attacks, gold is Reset, grey are single protocol steps. While one runs, all are disabled; the status line shows the result or the revert reason.
+### 4.2 Scenario bar
+Two rows: **scenarios** (Reset, S1–S4) and **step by hand** (Poke, Sync, Warp +1h). Hovering a button shows what it does in the status line; after a click the line shows the result or the revert reason. Details in §5.
 
-### 4.3 Sources
-*What each oracle says right now, and whether it counts.*
+### 4.3 Status card (left)
+- **Risk state**: GREEN / YELLOW / RED, and the **confidence score**.
+- **Why**: the rule that produced the state (§6).
+- **Liquidation guard**: off, or 🛡️ ON (`Dog.hole = 0`).
+- **Price vaults are valued at**: SmartOSM `cur`, and `nxt` (the price that takes over at the next hourly poke).
+- **SmartOSM**: its status in words (`LIVE` = last good update under 2h ago; `STALE`; `QUARANTINED` = holding back a suspicious upward jump) and the age of the last good update.
 
-| Column | Meaning |
-|---|---|
-| **Feed** | Chainlink (real feed), Pyth / RedStone / DEX TWAP (scenario-controllable stand-ins, `docs/DECISIONS.md` ADR-003). Under the name: its **weight** (`w2`) and **maxAge** — both governance-set in the aggregator. |
-| **Price** | Its latest observation, USD per PAXG. |
-| **Age** | Time since that observation, in chain time. Chainlink routinely sits ~16h old: it's a *deviation* feed that only updates on a 0.5% move or its 24h heartbeat, so "quiet" isn't "broken" — which is why its maxAge is 25h and the others' is 1h. |
-| **Fresh** | `fresh` if `ok` and age ≤ maxAge, else `stale`. |
-| **Cluster** | `inlier` if within 3 × MAD of the weighted median (with a 0.1% floor), else `outlier`. A stale feed shows a grey **not checked** — it never reaches the outlier test, so calling it an outlier would be wrong. |
-| **Contribution** *(mentor review R1)* | Bar + % = the feed's **weight share**: 28.6% / 28.6% / 28.6% / 14.3% for weights 2/2/2/1. **✓** = it currently counts (fresh *and* inlier); **✗** = excluded. That share is simultaneously how much it moves the price *and* how much confidence it carries. |
+### 4.4 Confidence score (right)
+The score as a **sum of points** (team decision Sep 19, so a volatility penalty can be subtracted later):
 
-Header: `3/4 counted · 71.4% of weight` = the coverage part of the score at a glance.
-Rows that don't count are tinted red.
+```
+score = ⌊ 50·Wq + 30·Wd + 20·Wf ⌋ − volatility penalty      (0 if fewer than 2 sources agree)
+GREEN ≥ 80 · YELLOW 40–79 · RED < 40
+```
 
-**Why it's there:** the mentor asked how much each oracle contributes. The answer on screen: exactly its weight share, and no single oracle can move the median because the breakdown point is ½ of total weight (3.5 of 7) and the largest single weight is 2.
-
-### 4.4 Confidence
-*One number for "how much should we trust this price right now?"*
-
-- **Gauge 0–100** with the three bands behind it: **RED < 50 · YELLOW 50–79 · GREEN ≥ 80**.
-- **`n/m inliers`** — inliers out of fresh sources. `no quorum` if fewer than 2 inliers (score is then forced to 0).
-- **lo–mid–hi band** — the cheapest inlier, the weighted-median price OracleGuard uses (gold), the most expensive inlier. A wide band = disagreement.
-- **The formula line** *(mentor review R1)*:
-  `score = ⌊100 · Wq · Wd · Wf⌋ = ⌊100 · 1.00 · 0.98 · 1.00⌋ = 98`
-- **Three factor bars:**
-
-| Factor | Name | Definition (`review.md` §R1.2) | What drags it down |
+| Row | Factor (0–1) | Computed from | Max points |
 |---|---|---|---|
-| **Wq** | quorum / coverage | Σ weight of counted feeds ÷ Σ all weights | a feed going stale, down, or being rejected as an outlier |
-| **Wd** | agreement | max(0, 1 − spread ÷ 2%), spread = (hi − lo)/mid | inliers disagreeing; 2% spread → 0 |
-| **Wf** | freshness | 1 while the freshest inlier is ≤ ½ its maxAge old, then linear → 0 | nobody publishing recently |
+| Quorum | Wq = weight of counted sources ÷ total weight | which sources are fresh *and* agree | 50 |
+| Agreement | Wd = 1 − spread ÷ 2% (spread = (hi − lo) / median of the counted prices); 0 if nothing counts | the counted prices | 30 |
+| Freshness | Wf = 1 while the newest counted price is ≤ ½ its source's max age, then linear → 0 | the newest counted price's age | 20 |
+| Volatility penalty | placeholder, currently 0 | — | − |
 
-In live mode the score itself comes from the contract (`aggregator.read().score`); the three factors are recomputed in the browser from `observations()` so the audience can see *why* it is what it is. The parity check guarantees they agree.
+**Nothing in these rows is hard-coded except the 50/30/20 split and the source weights (2/2/2/1).** The factors are recomputed from the sources on every poll. They look constant when nothing is happening because nothing is changing: the counted sources stay the same, prices agree to ~0.05%, and the newest price is always seconds old. They move as soon as a scenario runs (S2: Quorum 50 × 0.43; S1: everything 0).
 
-### 4.5 Controller
-*The decision.*
+The coloured strip under the total shows the thresholds and where the score sits.
 
-- **Big badge — GREEN / YELLOW / RED** — `controller.status(paxg).state`.
-- **🛡️ Liquidation guard** — `ON · hole = 0` or `OFF · liquidations open`. Independent of the colour.
-- **OSM status + age** — SmartOSM's `status()`: `LIVE`, `STALE` (no accepted update for > 2h), `QUARANTINED` (a suspicious *rise* is being held for confirmation, ADR-011), `STOPPED`, `UNINIT`.
-- **cur / nxt** — the price the protocol is acting on *now* (`cur`) and the one queued for the next hour (`nxt`). This 1-hour delay is inherited from Maker's OSM on purpose — it gives time to react.
-- **trigger:** — the rule that produced the current state (mock: the exact rule; live: the controller's score).
+### 4.5 Price sources
+One row per source: price, **age / max age**, status (`counted` = fresh and agreeing, `stale`, `outlier`, `no data`), and its **weight share** (28.6 / 28.6 / 28.6 / 14.3%). Under each name: where the number comes from. Footer: OracleGuard's price (weighted median of the counted sources) and the spread.
 
-### 4.6 Vat · paxg
-*The borrowing capacity that the state translates into.*
+**Max age per source** (governance-set in the aggregator, same values as `script/DeployLib.sol`, `review.md` §R1.1):
+- **Chainlink 25h.** The PAXG/USD feed is a *deviation + heartbeat* feed: it only writes when the price moves past its deviation threshold, or once every 24h (the heartbeat). In a quiet market it updates only every ~24h, and that is normal. 24h + 1h grace = 25h. Anything tighter would mark a healthy Chainlink as stale most of the day.
+- **Pyth / RedStone 1h.** These publish off-chain many times a second; a healthy one is seconds old. 1h matches the SmartOSM hop (a new price is accepted at most once an hour), so a source older than one hop has missed a whole update cycle.
+- **DEX TWAP 1h.** A TWAP is computed at read time, so it is always "fresh"; the 1h bound only matters if the adapter stops returning data.
 
-- **debt** — total rwaUSD minted against PAXG (≈ $43,029 on the fork).
-- **line** — the debt ceiling OracleGuard has set via `LineExecutor`.
-- **headroom** = line − debt = how much *new* rwaUSD can still be minted.
-- **Pill: `new borrowing: open / limited / frozen`** for GREEN / YELLOW / RED.
+### 4.6 Borrowing against PAXG
+The `Vat` (Maker's core ledger) numbers for the `paxg` collateral type, in plain words:
+- **debt**: all rwaUSD currently borrowed against PAXG (`Art × rate`). Real: ≈ $43,030.
+- **debt ceiling**: `Vat.line`, the most rwaUSD that may be outstanding against PAXG. A new borrow that would push debt above it reverts (`Vat/ceiling-exceeded`); repayments never check it.
+- **room**: ceiling − debt = how much can still be borrowed right now.
 
-Why the line and not `mat`? Because in a Maker fork `mat` is *also* the liquidation ratio — raising it to "be careful" would instantly make healthy vaults liquidatable. The ceiling only limits **new** debt, and Maker never checks the ceiling on repay (`docs/DECISIONS.md` ADR-001). *"Repayments always work"* is visible here.
+This is OracleGuard's only borrowing lever: GREEN sets the ceiling to debt + $250k, YELLOW to debt + $50k, RED to exactly the debt (no new borrowing). In mainnet mode a note also shows the **real** mainnet ceiling today ($1,000,000), since OracleGuard isn't installed there.
+Below: what the state means for users (borrow / repay / new liquidations / `Spotter.mat` never touched).
 
-### 4.7 What this state changes *(mentor review R3)*
-The `review.md` §R3 table row for the current state, parameter by parameter:
+### 4.7 Legacy OSM vs OracleGuard
+Left: the legacy OSM Multipli runs today (real price, reported **VALID** at any age, no staleness check, one source). Right: OracleGuard's price, state, score and SmartOSM status.
+Banners appear automatically:
+- **S3**: the legacy price is > 50% away from OracleGuard's median. *"10 PAXG worth $X can borrow $Y, leaving $Z of bad debt"*.
+- **S1**: the legacy price is > 24h old but still VALID, and OracleGuard is RED.
 
-| Row | GREEN | YELLOW | RED |
-|---|---|---|---|
-| Borrow new rwaUSD | up to $250,000/h (rate-limited refill) | limited to $50,000 total | frozen (`Vat/ceiling-exceeded`) |
-| Repay debt | always | always | always |
-| Open vault / deposit | allowed | allowed | allowed |
-| Withdraw (stays safe) | allowed | allowed | allowed |
-| New liquidations | open (`Dog.hole` = $400,000) unless 🛡️ | same | **same — a real crash must still liquidate** |
-| Running auctions | unaffected | unaffected | unaffected |
-| `Vat.line` | min(debt + 250k, 1M cap) | min(debt + 50k, cap) | = debt |
-| `Spotter.mat` | never touched | never touched | never touched |
+The dollar figures are **derived**: collateral = 10 × OracleGuard's price; max borrow = 10 × legacy price ÷ `mat`. On the fork they reproduce the Baseline tests ($312,320 borrowable against $43,725, i.e. $268,595 of bad debt; S1: $31,232).
 
-With the guard on, "New liquidations" becomes `paused - Dog.hole = 0 (max 6h)`.
-Footer: the trigger, and the hysteresis rule (*downgrades are instant; an upgrade needs 3 healthy syncs ≥ 10 min apart*).
-
-**Why it's there:** it turns "GREEN/YELLOW/RED" from a colour into a contract. It also answers the killer objection — *"won't you block liquidations in a crash?"* — on screen: RED never blocks liquidations.
-
-The numbers (250k / 50k / 400k / 6h / 1.5% / 3%) match `contracts/script/DeployLib.sol` exactly; see `ACTION_ITEMS.md` Done.
-
-### 4.8 Legacy OSM vs OracleGuard *(J4)*
-Two columns, same consumers, same ABI, different answers.
-
-| Legacy OSM (what rwaUSD runs today) | OracleGuard |
-|---|---|
-| price from storage slot 3 (`cur`) | SmartOSM `cur` |
-| `peek() valid`: **VALID** — *even when days old* | confidence `n / 100` or `no quorum` |
-| age since its last update (`zzz`) | state + 🛡️ |
-| staleness check: **none** | OSM status + age |
-| sources: 1 (Chainlink) | `n of 4 counted` |
-
-**Killer-moment banners** appear under it automatically:
-- **S3 banner** — when the legacy price is > 50% away from OracleGuard's median:
-  *"Legacy: 10 PAXG ($43,724) minted $312,319 → $268,595 bad debt"* vs *"OracleGuard: blocked — the ×10 feed is an outlier"*.
-- **S1 banner** — when the legacy price is > 24h old but still `VALID` and OracleGuard is RED:
-  *"Legacy: 41h-old price still VALID → $31,231 rwaUSD minted against it"* vs *"OracleGuard: RED — new debt reverts, repayments still work"*.
-
-The dollar figures are **measured**, not estimated: they come from Kapilan's `Baseline_S1`/`Baseline_S3` fork tests on the real contracts (`docs/DEMO_SCRIPT.md` §D).
-
-### 4.9 Event log
-The last 40 events from SmartOSM and RiskController, newest first, decoded with the frozen ABIs:
-
-| Event | Emitted when |
-|---|---|
-| `Poke` | SmartOSM accepted a new price (`cur ← nxt`, `nxt ← mid`) |
-| `PokeSkipped` | poke ran but refused to update — `NO_QUORUM` (< 2 inliers) or `AGGREGATOR_FAILED` |
-| `Quarantined` | a low-confidence *upward* jump > 5% was held back pending confirmation (ADR-011) |
-| `StateChanged` | GREEN ↔ YELLOW ↔ RED |
-| `GuardOn` / `GuardOff` | `Dog.hole` set to 0 / restored (or expired after 6h) |
-| `Synced` | the controller re-evaluated (state, score, mid, OSM cur, line, guard) |
-
-Raw on-chain values are made readable: WAD/RAD integers become dollars (`line=$93,029.32`), state codes become names (`from=GREEN · to=YELLOW`), and the always-`paxg` ilk is hidden. Times are **chain** time (the fork's clock, which jumps when you warp).
-
-Mock mode also logs `Init`, `Scenario`, `Warp`, `Reset` so the story reads top to bottom.
+### 4.8 Event log (collapsed)
+Click to open. Mainnet mode logs the modelled events (`Init`, `Poke`, `PokeSkipped`, `Quarantined`, `StateChanged`, `GuardOn/Off`, `Synced`, plus `Scenario` / `Warp` / `Reset`); fork mode decodes the real SmartOSM and RiskController events.
 
 ---
 
@@ -205,7 +158,7 @@ Each button maps to a step in `docs/DEMO_SCRIPT.md` §B and a threat in `docs/PR
 ### Reset
 - **Does:** returns everything to the post-spell starting point (GREEN, score ~100, line $293,029).
 - **Live:** `evm_revert` to a snapshot the dashboard took when the page loaded, then takes a fresh snapshot (anvil consumes a snapshot on revert, so the next Reset needs a new one).
-- **Mock:** reseeds the simulated world.
+- **Mainnet:** clears every fault and re-primes the modelled SmartOSM from the real legacy price.
 - **Use:** before every scenario, so each one starts clean.
 
 ### S1 · stale feed — threat V1 (unbounded stale acceptance) + V10
@@ -253,7 +206,7 @@ Each button maps to a step in `docs/DEMO_SCRIPT.md` §B and a threat in `docs/PR
 
 Checked top to bottom by `RiskController._target` (and mirrored in `src/protocol.ts:deriveState`):
 
-1. no quorum (< 2 inliers) **or** score < 50 → **RED**
+1. no quorum (< 2 inliers) **or** score < 40 → **RED**  *(the deployed contract still uses 50 until `DeployLib.sol` is updated)*
 2. SmartOSM not `LIVE` (STALE / QUARANTINED / STOPPED) → **RED**
 3. `live.lo < OSM cur × (1 − 1.5%)` — market below our delayed price → **RED**
 4. score < 80 → **YELLOW** (also: market closed per SessionCalendar, for ilks that have one)
@@ -261,18 +214,18 @@ Checked top to bottom by `RiskController._target` (and mirrored in `src/protocol
 
 **Guard** (independent): score ≥ 80 **and** `live.hi × (1 − 3%) > OSM cur` → `Dog.hole = 0`, auto-off after 6h.
 
-**Hysteresis:** downgrades are immediate; upgrades need `kUp = 3` healthy syncs ≥ 10 minutes apart. This is why, in live mode, the colour can stay YELLOW/RED for a few syncs after a scenario "recovers" — the mock simplifies this and upgrades immediately.
+**Hysteresis:** downgrades are immediate; upgrades need `kUp = 3` healthy syncs ≥ 10 minutes apart. This is why, in live mode, the colour can stay YELLOW/RED for a few syncs after a scenario "recovers" — the mainnet-mode model simplifies this and upgrades immediately.
 
 ---
 
 ## 7. Running it
 
-### 7.1 Mock (no chain)
+### 7.1 Mainnet data (no local chain)
 ```powershell
 cd C:\Users\jeffr\Desktop\multipli\multipli\dashboard
 pnpm install          # once
-pnpm dev              # http://localhost:5173
-pnpm check:parity     # formula == contract (5/5)
+pnpm dev              # http://localhost:5173 (needs internet: mainnet RPC + RedStone API)
+pnpm check:parity     # score vectors (5/5) + V-e quarantine check
 pnpm build            # typecheck + production build
 ```
 
@@ -321,28 +274,28 @@ Notes:
 dashboard/
 ├─ DASHBOARD.md                ← this file
 ├─ README.md                   quick-start + panel checklist
-├─ scripts/parity.mjs          review.md §R1.4 parity vectors (pnpm check:parity)
+├─ scripts/parity.mjs          review.md §R1.4 vectors, additive score (pnpm check:parity)
 ├─ public/fork.json            (gitignored) live-mode address book
 └─ src/
-   ├─ protocol.ts              TS mirror of the aggregator + controller rules. No React, no viem.
-   ├─ data.ts                  types, mock simulation, live viem provider (2s poll), formatting
-   ├─ scenarios.ts             button runner: mock scripts / viem test actions against anvil
+   ├─ protocol.ts              aggregator + additive score + controller rules. No React, no viem.
+   ├─ mainnet.ts               real mainnet reads (Chainlink, Pyth, RedStone, Uniswap TWAP, Vat, Spotter, legacy OSM)
+   ├─ data.ts                  types, mainnet provider (real inputs + modelled OracleGuard), fork provider, formatting
+   ├─ scenarios.ts             button runner: faults on the mainnet world / viem test actions against anvil
    ├─ useOracle.ts             React hook over the provider
    ├─ App.tsx                  layout
    ├─ abi/*.json               copies of the frozen /abi (never edit here — re-copy from /abi)
    ├─ fork.example.json        placeholder addresses (fallback when public/fork.json is missing)
    └─ components/
       ├─ ScenarioBar.tsx       §4.2 / §5
-      ├─ SourcesTable.tsx      §4.3
-      ├─ ConfidenceGauge.tsx   §4.4
-      ├─ StateBadge.tsx        §4.5
-      ├─ VatPanel.tsx          §4.6
-      ├─ StateEffects.tsx      §4.7
-      ├─ LegacyPanel.tsx       §4.8
-      └─ EventLog.tsx          §4.9
+      ├─ StatusCard.tsx        §4.3
+      ├─ ScoreCard.tsx         §4.4
+      ├─ SourcesTable.tsx      §4.5
+      ├─ BorrowPanel.tsx       §4.6
+      ├─ LegacyPanel.tsx       §4.7
+      └─ EventLog.tsx          §4.8
 ```
 
-Stack: React 19 + Vite + TypeScript, viem (`createPublicClient` for reads, `createTestClient` for anvil actions), Recharts (gauge), hand-written CSS on Tailwind's base.
+Stack: React 19 + Vite + TypeScript, viem (`createPublicClient` for reads, `createTestClient` for anvil actions), hand-written CSS on Tailwind's base.
 
 ---
 
@@ -353,7 +306,7 @@ Stack: React 19 + Vite + TypeScript, viem (`createPublicClient` for reads, `crea
 | Red banner: *Live RPC failed* | anvil not running, or no `public/fork.json` (placeholder addresses) | start anvil; re-run Deploy + Spell; re-copy `fork.json` |
 | Deploy fails `nonce too low` | a previous deploy was interrupted mid-broadcast | stop anvil, start a fresh fork, deploy again (with `--slow`) and let it finish |
 | Deploy never finishes; `cast rpc txpool_status` shows `queued` > 0 | burst-sent txs stuck in anvil's mempool | kill forge; `cast rpc anvil_dropAllTransactions`; re-send the stuck calls listed in `contracts/broadcast/Deploy.s.sol/31337/run-latest.json` with `cast send` (for us: the last three `rely(AdminSafe)`), or restart the fork and deploy with `--slow` |
-| Page says **MOCK** after `pnpm dev --mode live` | you opened the old server on :5173; the live one moved to :5174 | use the URL Vite printed |
+| Page says **Mainnet data** after `pnpm dev --mode live` | you opened the old server on :5173; the live one moved to :5174 | use the URL Vite printed |
 | First `forge` command seems to hang | first-time solc 0.8.24 download, or the first deploy pulling fork state | wait; later runs are fast |
 | Button status: `SmartOSM.poke reverted` | poke called before `zzz + hop` | shouldn't happen (the runner warps first) — press **Reset** and retry, report it |
 | Score drops to 0 after **Warp +1h** / poke is `PokeSkipped` | mocks went stale (1h maxAge) | use the dashboard's buttons, which refresh them; don't warp with raw `cast` |

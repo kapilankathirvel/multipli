@@ -62,6 +62,14 @@
 - [ ] Open `FLOW_EXPLAIN_2.md` on GitHub and check that the Mermaid diagram (§2.1) renders. If it doesn't, use the ASCII version (§2.2) on the slides.
 - [ ] (Kapilan) Check the judge-facing doc `FLOW_EXPLAIN_2.md` against the contracts. It reuses the numbers from `review.md` §R2.4b and `FLOW_EXPLAINED.md`; update it too if parameters change. Items marked 🗺️ (real TWAP + liquidity floor, round-TWAP poke, challenge window, paid keepers, fundamental anchor/PoR, timelock) are roadmap and must not be demoed as built.
 
+### Dashboard v2: real mainnet data + additive score (Jeffrey, added Sep 19)
+- [ ] (Kapilan) **Port the additive score to the contracts.** The dashboard now uses `score = ⌊50·Wq + 30·Wd + 20·Wf⌋ − volPenalty` (0 without quorum; Wd = 0 when nothing counts) with **GREEN ≥ 80 · YELLOW 40–79 · RED < 40**. Needed: `OracleGuardAggregator._score` (sum instead of product), `script/DeployLib.sol` `yellowScore: 50 → 40`, the fork tests that assert scores, and `review.md` §R1.2–§R1.4. New §R1.4 vectors: V-a 100 · V-b 92 · V-c 85 · V-d 92 · V-e 70 (`dashboard/scripts/parity.mjs` prints old and new). Until then, fork mode shows "The deployed contract still multiplies (score N)".
+- [ ] (Team) **Decide on the S3/one-oracle-lost narrative.** With the sum, losing one major oracle gives 85 (GREEN), not 71 (YELLOW). `docs/DEMO_SCRIPT.md`, the deck and `review.md` §R1.3 say "S3 → YELLOW". The price is still protected (the ×10 feed is an outlier), but the colour changes. Update the docs, or raise the quorum weight (0.75 makes one-major-lost 78 YELLOW).
+- [ ] (Team) **Safety note for the Q&A:** with a sum, a 2%+ disagreement (Wd = 0) no longer forces the score to 0 (V-e: two majors ×1.2 → 70 YELLOW instead of 0 RED). It is still stopped because SmartOSM quarantines the +20% jump (asserted in `parity.mjs`). Be ready to say that.
+- [ ] (Jeffrey) Pyth shows **stale** in mainnet mode because nobody has pushed PAXG to the Pyth contract on Ethereum for ~110 days (and the off-chain Hermes API now needs a key). That's real data, and a good pitch line; if we want Pyth fresh, get a Hermes API key and I'll wire it in.
+- [ ] (Jeffrey) Commit `63d2ba8 "added flow_explain_2.md"` also contains the whole dashboard v2 rewrite (it was taken mid-work). The code in it is the final version; the matching README/DASHBOARD.md updates are still uncommitted. Mention it in the next commit message, or tell the team.
+- [ ] (Kapilan) Keep `IMPLEMENTATION_EXPLAINED.md` / `FLOW_EXPLAINED.md` / `FLOW_EXPLAIN_2.md` in sync once the score is ported (they describe the product formula and the 50 threshold).
+
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
 - [ ] (added Sep 19, design) Who pokes the OSM/Spotter in production, and how often?
