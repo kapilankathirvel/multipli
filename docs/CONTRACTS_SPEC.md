@@ -161,7 +161,7 @@ enum Status { UNINIT, LIVE, STALE, QUARANTINED, STOPPED }
   1. `require(pass(), "OSM/not-passed")` (same string as Maker).
   2. `Reading r = aggregator.read(); lastReading = r;`
   3. If `!r.ok`: emit `PokeSkipped(reason=NO_QUORUM, r.score)` and **return without changing cur/nxt** (legacy behaviour, but now *observable*: `age()` keeps growing and `status()` becomes STALE).
-  4. Jump check vs `nxt`: `jump = |r.mid - nxt| * 1e4 / nxt`.
+  4. Jump check vs `nxt` (**asymmetric, ADR-011**: only `r.mid > nxt` with jump > jumpLimitBps and score < jumpMinScore is quarantined; on quarantine `cur = nxt` still advances; a later hop still showing a rise confirms it). Original text for reference: `jump = |r.mid - nxt| * 1e4 / nxt`.
      - If `jump > jumpLimitBps && r.score < jumpMinScore`:
        - if `pending.has == 1` and `|r.mid - pending| <= jumpLimitBps` (re-confirmed on a later hop), then accept.
        - else `pending = r.mid; pendingSince = now;` emit `Quarantined(r.mid, nxt, r.score)`; `zzz = prev(now)`; return.

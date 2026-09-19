@@ -11,6 +11,12 @@
 - [ ] Read `IMPLEMENTATION_EXPLAINED.md` (≈30 min): every contract and test, with numbers.
 - [ ] Practise the 2-minute pitch (Part 8) and the tough questions (Part 9) out loud; share both files with Varun & Jeffrey.
 
+### Mentor review follow-ups (added Sep 19, K6b)
+- [ ] Re-read `review.md` §R2.4b (replay results) and **ADR-011** in `docs/DECISIONS.md`. "Our validation caught a real flaw and we fixed it" is a strong story for the mentor.
+- [ ] Tell **Varun**: SmartOSM's quarantine is now **asymmetric** (only low-agreement upward jumps; ADR-011). His Python model (`research/og_model.py`) must mirror it, and he can compare his FP/FN with §R2.4b.
+- [ ] Tell **Jeffrey**: add the §R2.4b table to the mentor "validation" slide (it replaces the placeholder).
+- [ ] Delete the stray `Untitled` file in the repo root (it only holds copied git commands) before committing.
+
 ### Pitch / deck accuracy
 - [ ] (added Sep 19, docs review) Find a citable source for "Oracle attacks caused 13% of DeFi exploits in 2025", or soften it to "oracle manipulation is consistently among the top DeFi exploit classes". → `docs/PITCH.md`
 - [ ] (added Sep 19, docs review) Drop "first system built specifically for RWA oracles". Use "first graduated-trust oracle layer that drops into rwaUSD's deployed Maker-fork contracts without core changes." → `docs/PITCH.md`
@@ -39,7 +45,6 @@
 
 ### Dashboard (Jeffrey, added Sep 19 — J1/J2)
 - [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1. Drive the scenarios from DevTools: `og('s1')`, `og('s2')`, `og('s3')`, `og('s4')`, `og('reset')`.
-- [ ] (Kapilan) The dashboard's live mode names the feeds from a `oracleguard.sources` map in `deployments/fork.json` whose **keys** are `chainlink`/`pyth`/`redstone`/`dexTwap` (or `mockA/B/C`), as in `fork.example.json`. If `Deploy.s.sol` writes different keys, tell Jeffrey — otherwise the table silently falls back to slot order.
 
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
@@ -48,6 +53,7 @@
 - [ ] (added Sep 19, design) Would they adopt a timelock on oracle config (our finding V5)?
 
 ## ✅ Done
+- [x] (added Sep 19, Jeffrey) Confirm `fork.json` source keys match the dashboard ✅ Sep 19: `Deploy.s.sol` writes `oracleguard.sources.{chainlink,pyth,redstone,dexTwap}` (verified on the anvil smoke test)
 - [x] (added Sep 19, J1/J2) Commit the dashboard (`dashboard/` was untracked) ✅ Sep 19: commit `feat(dashboard): scaffold with mock/live data layer + Oracle War Room panels (mentor review R1/R3)`
 - [x] (added Sep 19, J1/J2) Confirm the R3 controller numbers hard-coded in `dashboard/src/protocol.ts` match the real deploy ✅ Sep 19: checked against K5's `script/DeployLib.sol` — greenGap 250,000 · yellowGap 50,000 · greenScore 80 · yellowScore 50 · epsBps 150 · epsLiqBps 300 · guard 6h · refill 1h · weights 2/2/2/1 (25h/1h/1h/1h) all identical. Re-check if `setIlk` config changes.
 - [x] (added Sep 19) Push Phase 1 to github.com/kapilankathirvel/multipli ✅ Sep 19: pushed by Kapilan

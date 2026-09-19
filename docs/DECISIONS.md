@@ -45,3 +45,12 @@ Format: context → decision → consequences. **Read this before changing a des
 
 ## ADR-010: No wallet connect in the dashboard MVP
 - **Decision:** viem test/public clients against anvil with impersonation. Saves ~2h.
+
+## ADR-011: Asymmetric quarantine in SmartOSM (found by the incident replay)
+- **Context:** the K6b replay of Black Thursday and LUNA showed the symmetric quarantine held back *every* hour of a real crash, because one lagging oracle kept agreement below 80. The Vat kept the pre-crash price for 4h, so liquidations couldn't fire (bad-debt risk).
+- **Decision:**
+  1. Quarantine only a low-agreement **upward** jump (> 5%, score < 80). That's the direction that enables over-borrowing.
+  2. Downward moves pass immediately; an unfairly LOW price is handled by the RiskController's liquidation guard.
+  3. A held-back rise is confirmed if a later hop still shows a rise (no "within 5% of pending" rule, which failed for continuing moves).
+  4. During quarantine the vetted `nxt` still advances into `cur`, so the pipeline never stalls.
+- **Consequences:** I8 extra liquidation lag 4h → 0h, I4 → 0h. Transient upward manipulation is still never promoted. A sustained two-hour upward manipulation is accepted, but is bounded by YELLOW/greenGap (same as before).

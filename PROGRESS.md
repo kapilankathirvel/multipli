@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K6b incident replay (mentor review R2), then K7 integration checkpoint. Mentor review plan: `review.md`.
+**Next action:** kapilan.md K7 integration checkpoint (pull Varun/Jeffrey, wire calendar/Pyth, live demo), then K8 invariants. Mentor review plan: `review.md`.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K6b done:** incident replay I1–I8 on real contracts (mint FN 21→2, liq FN 5→1); found + fixed quarantine-freezes-crash flaw (ADR-011); 101/101 green | K7 integration |
 | Sep 19 | Claude | **K5+K6 done:** DeployLib/Deploy/Spell (smoke-tested on anvil), OracleGuard.t.sol (8): all baseline attacks neutralised on real rwaUSD; 91/91 green | K6b replay |
 | Sep 19 | Claude | **K4 done:** RiskController (15 tests): rate-limited GREEN, anchored YELLOW, RED=debt, guard with expiry+latch, spam-proof hysteresis | K5 Deploy/Spell |
 | Sep 19 | Claude | **K3 done:** SmartOSM drop-in (21 tests); real Spotter/Clipper work unchanged; 68/68 suite green. Note: fast sources must be refreshed before every poke (1h maxAge) | K4 RiskController |
