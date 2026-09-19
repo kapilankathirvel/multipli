@@ -17,7 +17,7 @@ import controllerAbiJson from './abi/IRiskController.json' with { type: 'json' }
 import osmAbiJson from './abi/ISmartOSM.json' with { type: 'json' }
 import vatAbiJson from './abi/IVat.json' with { type: 'json' }
 import forkExample from './fork.example.json' with { type: 'json' }
-import { fetchMainnet, type MainnetData, type RealFeed } from './mainnet'
+import { MAINNET_RPC, fetchMainnet, type MainnetData, type RealFeed } from './mainnet'
 import {
   P,
   aggregate,
@@ -460,7 +460,13 @@ export function createMainnetProvider(): DataProvider {
       else world.data = data
       tick()
     } catch (err) {
-      fail?.(`Mainnet read failed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+      const msg = err instanceof Error ? err.message.split('\n')[0] : String(err)
+      const unreachable = /HTTP request failed|fetch failed|ECONNREFUSED|NetworkError/i.test(msg)
+      fail?.(
+        unreachable
+          ? `Can't reach the mainnet RPC (${MAINNET_RPC}). Check your internet connection, or set VITE_MAINNET_RPC_URL to a different endpoint.`
+          : `Mainnet read failed: ${msg}`,
+      )
     }
   }
 
@@ -781,16 +787,27 @@ export function createForkProvider(): DataProvider {
   let cfg: SourceCfg[] | undefined
 
   const poll = async () => {
+    let rpc = import.meta.env.VITE_RPC_URL || 'http://127.0.0.1:8545'
     try {
       const fork = await loadFork()
-      const rpc = import.meta.env.VITE_RPC_URL || fork.rpc || 'http://127.0.0.1:8545'
+      rpc = import.meta.env.VITE_RPC_URL || fork.rpc || rpc
       if (!client) client = createPublicClient({ chain: foundry, transport: http(rpc) })
       // weights change only through governance, so read them once
       if (!cfg) cfg = await readSourceCfg(client, fork.oracleguard.aggregator as Address, fork)
       emit?.(await readFork(client, fork, cfg))
     } catch (err) {
       cfg = undefined
-      fail?.(`Fork RPC failed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+      client = undefined // the transport may be wedged on a dead connection; rebuild next poll
+      const msg = err instanceof Error ? err.message.split('\n')[0] : String(err)
+      // "HTTP request failed." / "fetch failed" -> nothing is listening on the RPC port at all,
+      // which is the common case (anvil isn't running) and deserves a plain instruction instead
+      // of viem's generic transport error.
+      const unreachable = /HTTP request failed|fetch failed|ECONNREFUSED|NetworkError/i.test(msg)
+      fail?.(
+        unreachable
+          ? `No local fork found at ${rpc}. Start anvil + Deploy + Spell (DASHBOARD.md §7.2), or run "pnpm dev" without --mode live for mainnet data (no chain needed).`
+          : `Fork read failed: ${msg}`,
+      )
     }
   }
 

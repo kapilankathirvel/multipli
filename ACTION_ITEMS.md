@@ -62,6 +62,12 @@
 - [ ] (Kapilan) Live mode drives the demo by sending `MockSource.setPrice` from **anvil account #0** (impersonated). If the deploy ever stops leaving account #0 as the mocks' ward, the buttons stop working — tell Jeffrey.
 - [ ] (Jeffrey, from K6b) Put the `review.md` §R2.4b replay table on the mentor "validation" slide in J5 — it replaces the placeholder. (The mock's quarantine already follows ADR-011: asymmetric, `cur` keeps advancing.)
 
+### README rewrite (Jeffrey, added Sep 20)
+- [ ] 🔴 (Kapilan/Varun) **`main` doesn't compile**: the Pyth address `0x4305FB666EE7FeA854E05F87c2b6107386d4B3C5` has a bad EIP-55 checksum in `contracts/script/Deploy.s.sol:40` and `contracts/test/unit/PythSource.t.sol:13`. Replace it with `0x4305FB666ee7fEa854e05F87c2B6107386D4B3C5` (the form solc suggests). Until then `forge test` fails, including the unit tests. The README's quickstart assumes this is fixed.
+- [ ] Check the new `README.md` on GitHub: both Mermaid diagrams render and the `docs/reference` branch link works.
+- [ ] (Kapilan) Check the README numbers (the replay table, the test count of ≈ 134 + 6 invariants) after the next test run, and update them if they change.
+- [ ] Decide on the score: the dashboard uses an additive score (RED < 40) but the contract multiplies (RED < 50). The README documents the contract and notes the difference. Either port the change to the contract or remove the note once they match.
+
 ### FLOW_EXPLAIN_2.md (Jeffrey, added Sep 19)
 - [ ] Open `FLOW_EXPLAIN_2.md` on GitHub and check that the Mermaid diagram (§2.1) renders. If it doesn't, use the ASCII version (§2.2) on the slides.
 - [ ] (Kapilan) Check the judge-facing doc `FLOW_EXPLAIN_2.md` against the contracts. It reuses the numbers from `review.md` §R2.4b and `FLOW_EXPLAINED.md`; update it too if parameters change. Items marked 🗺️ (real TWAP + liquidity floor, round-TWAP poke, challenge window, paid keepers, fundamental anchor/PoR, timelock) are roadmap and must not be demoed as built.

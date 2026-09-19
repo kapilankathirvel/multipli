@@ -50,7 +50,9 @@ export default function App() {
       {error && <div className="banner-err">{error}</div>}
 
       {!snap ? (
-        <div className="boot">{error ? 'Waiting for data…' : 'Reading the chain…'}</div>
+        <div className="boot">
+          {error ? 'No data to show yet — see the message above.' : 'Reading the chain…'}
+        </div>
       ) : (
         <>
           <ScenarioBar mode={snap.mode} />
