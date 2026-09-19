@@ -43,6 +43,7 @@ export function ScenarioBar({ mode }: { mode: 'mock' | 'live' }) {
             key={s.id}
             type="button"
             title={s.hint}
+            aria-label={`${s.label}: ${s.hint}`}
             className={`btn btn-${s.kind}${busy === s.id ? ' btn-busy' : ''}`}
             disabled={busy !== null}
             onClick={() => void fire(s.id)}

@@ -14,7 +14,9 @@
 import {
   createTestClient,
   http,
+  pad,
   publicActions,
+  toHex,
   walletActions,
   type Abi,
   type Address,
@@ -238,7 +240,18 @@ function createLiveRunner(): Runner {
             await setMocks(c, mocks.slice(0, 1), p * 10n)
           })
           await sync(c, controller)
-          return 'S3: one source ×10 → outlier, median unchanged'
+          // The legacy stack never reads the mocks, so compromise ITS single feed too, or the
+          // comparison panel has nothing to compare. We write the end state of Kapilan's
+          // Baseline_S3 fork test (Safe swaps the adapter to a 10x feed, OSM poked twice) into
+          // the legacy OSM's `cur` (slot 3: has << 128 | val). After the spell nothing reads the
+          // legacy OSM, so this only feeds the Legacy-vs-OracleGuard panel; Reset reverts it.
+          await c.setStorageAt({
+            address: f.maker.legacyOsm as Address,
+            index: 3,
+            value: pad(toHex((1n << 128n) | (p * 10n)), { size: 32 }),
+          })
+          await c.mine({ blocks: 1 })
+          return 'S3: one source ×10 → outlier, median unchanged · legacy fed the same ×10'
         }
 
         case 's4': {

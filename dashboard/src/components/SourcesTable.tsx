@@ -64,7 +64,11 @@ export function SourcesTable({ sources }: { sources: Source[] }) {
               <tr key={s.name} className={!s.counts ? 'row-out' : undefined}>
                 <td className="name">
                   {s.name}
-                  <span className="muted weight"> w{s.weight} · maxAge {formatAge(s.maxAgeSec)}</span>
+                  {/* whole hours: "25h" (deliberately > Chainlink's 24h heartbeat), not "1.0d" */}
+                  <span className="muted weight">
+                    {' '}
+                    w{s.weight} · maxAge {Math.round(s.maxAgeSec / 3600)}h
+                  </span>
                 </td>
                 <td className="num mono">{formatPrice(s.price)}</td>
                 <td className="num mono">{formatAge(s.ageSec)}</td>
@@ -72,7 +76,12 @@ export function SourcesTable({ sources }: { sources: Source[] }) {
                   <Pill on={s.fresh} onLabel="fresh" offLabel="stale" />
                 </td>
                 <td>
-                  <Pill on={s.inlier} onLabel="inlier" offLabel="outlier" />
+                  {/* a stale feed never reaches the outlier test, so don't call it an outlier */}
+                  {s.fresh ? (
+                    <Pill on={s.inlier} onLabel="inlier" offLabel="outlier" />
+                  ) : (
+                    <span className="pill pill-na">not checked</span>
+                  )}
                 </td>
                 <td>
                   <Contribution s={s} />

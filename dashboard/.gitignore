@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# live mode: per-machine copy of deployments/fork.json (anvil addresses)
+public/fork.json

@@ -128,7 +128,11 @@ export function ConfidenceGauge({
         <Factor
           tag="Wf freshness"
           value={factors.wf}
-          note={`freshest inlier ${formatAge(reading.freshestAge)} old`}
+          note={
+            reading.nInliers > 0
+              ? `freshest inlier ${formatAge(reading.freshestAge)} old`
+              : 'no inliers to measure'
+          }
         />
       </div>
     </section>

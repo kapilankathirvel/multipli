@@ -491,6 +491,25 @@ function decodeReason(reason: number): string {
   return { 1: 'NO_QUORUM', 2: 'AGGREGATOR_FAILED' }[reason] ?? `code=${reason}`
 }
 
+const WAD_ARGS = new Set(['mid', 'osmCur', 'candidate', 'nxt', 'price'])
+
+/**
+ * Turns raw decoded event args into something a human can read in the log:
+ * WAD/RAD integers become dollars, state codes become names. Returns null to hide an
+ * arg (the ilk is always paxg; Poke's second field is the hop timestamp, not an age).
+ */
+function formatEventArg(key: string, value: unknown): string | null {
+  const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+  if (key === 'ilk' || key === 'age') return null
+  if (key === 'reason') return `reason=${decodeReason(Number(value))}`
+  if (key === 'state' || key === 'from' || key === 'to')
+    return `${key}=${RISK_STATE[Number(value)] ?? String(value)}`
+  if (key === 'val') return `cur=${usd(wadToNum(BigInt(value as Hex)))}` // Poke(bytes32 cur, …)
+  if (key === 'lineRad') return `line=${usd(radToUsd(value as bigint))}`
+  if (WAD_ARGS.has(key) && typeof value === 'bigint') return `${key}=${usd(wadToNum(value))}`
+  return `${key}=${String(value)}`
+}
+
 export async function loadFork(): Promise<ForkShape> {
   try {
     const res = await fetch('/fork.json')
@@ -564,7 +583,9 @@ async function readLive(
   const controller = fork.oracleguard.controller as Address
   const vat = fork.maker.vat as Address
   const legacyOsm = fork.maker.legacyOsm as Address
-  const head = await client.getBlockNumber()
+  // cacheTime 0: viem caches the head for ~4s by default, which made ages and the event
+  // log lag one poll behind every scenario button (found on the first live anvil run)
+  const head = await client.getBlockNumber({ cacheTime: 0 })
   const fromBlock = head > 2_000n ? head - 2_000n : 0n
 
   const [block, reading, obs, price, osmStatus, age, risk, ilk, legacySlot, logs] =
@@ -665,12 +686,10 @@ async function readLive(
         const raw = decoded.args as unknown
         const args: Record<string, unknown> =
           raw && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
-        let detail = Object.entries(args)
-          .map(([k, v]) => `${k}=${String(v)}`)
+        const detail = Object.entries(args)
+          .map(([k, v]) => formatEventArg(k, v))
+          .filter((s): s is string => s !== null)
           .join(' · ')
-        if (decoded.eventName === 'PokeSkipped' && args.reason != null) {
-          detail = `reason=${decodeReason(Number(args.reason))} score=${String(args.score ?? '')}`
-        }
         events.push({
           id: `${log.transactionHash}-${String(log.logIndex)}`,
           t: now * 1000,

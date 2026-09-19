@@ -1,5 +1,7 @@
 # Oracle War Room (`dashboard/`)
 
+> **Full guide:** [`DASHBOARD.md`](DASHBOARD.md) — every panel, every button, why it exists, and the end-to-end run on a real mainnet fork.
+
 React 19 + Vite + viem + Tailwind + Recharts. **Mock mode needs no chain** — it runs a small
 simulation of the aggregator + controller (`src/protocol.ts`), so the panels show derived numbers,
 not canned ones. Live mode polls Kapilan's anvil fork every 2s.
@@ -59,7 +61,7 @@ pnpm lint
 
 ## 3. Live mode (after the integration checkpoint)
 
-1. Run Varun's `scripts/demo-up.sh` (anvil + deploy + spell). That writes `deployments/fork.json`.
+1. Bring up the fork and install OracleGuard — exact commands in [`DASHBOARD.md` §7.2](DASHBOARD.md) (anvil → `Deploy.s.sol --slow` → `Spell.s.sol --slow`), or Varun's `scripts/demo-up` once it lands. That writes `deployments/fork.json`.
 2. Copy it into the dashboard's static folder:
 
 ```powershell
@@ -69,7 +71,7 @@ copy ..\deployments\fork.json public\fork.json
 3. Start the UI against anvil:
 
 ```bash
-pnpm dev --mode live      # or put VITE_MODE=live in dashboard/.env (see .env.example)
+pnpm dev --mode live      # use the URL Vite prints (moves to :5174 if :5173 is busy)
 ```
 
 **Reads:** `aggregator.read()` / `observations()` / `sourceCount()` / `sourceAt(i)`,
@@ -82,7 +84,9 @@ Ages use **chain** time, so time warps don't break them.
 **anvil account #0** (`0xf39F…2266`, the deployer and therefore their ward), impersonated so no
 private key sits in the repo — plus the permissionless `SmartOSM.poke()` and
 `RiskController.sync(paxg)`, and the anvil test RPCs `evm_snapshot / evm_revert / evm_increaseTime /
-evm_mine`. It never touches the Maker core directly.
+evm_mine`. It never writes to OracleGuard's state or the live Maker core. Exception: S3 writes a
+10× price into the **legacy OSM**'s storage (`anvil_setStorageAt`, slot 3) so the comparison panel has a
+compromised legacy to compare against — after the spell nothing reads it ([`DASHBOARD.md` §5](DASHBOARD.md)).
 
 Two ordering rules the runner enforces (learned in K3):
 1. `poke()` reverts `OSM/not-passed` until `zzz + hop`, so it warps to the next hop first;
@@ -105,6 +109,5 @@ scripts/parity.mjs  review.md §R1.4 parity vectors
 
 ## Status
 
-J1–J4 done. **The live path has never run against a real anvil fork** (Foundry isn't installed on
-this machine), so budget a few minutes at the start of J6 to shake it out. Left: J5 (`docs/PITCH.md`)
-and J6 (go live + video).
+J1–J4 done and **verified end to end on a real mainnet fork** (Sep 19): every button, headless and in
+Chrome — results table in [`DASHBOARD.md` §10](DASHBOARD.md). Left: J5 (`docs/PITCH.md`) and J6 (the video).
