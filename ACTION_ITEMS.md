@@ -13,14 +13,12 @@
 
 ### Setup / housekeeping
 - [ ] (added Sep 19, Phase 1) **Restart Cursor** (or open a new terminal) so the new PATH entry `%USERPROFILE%\.foundry\bin` (forge/anvil/cast) is picked up.
-- [ ] (added Sep 19, Phase 1) Point `origin` at https://github.com/kapilankathirvel/multipli and push Phase 1 (commands in `docs/GIT_WORKFLOW.md`). Last attempt failed: `git add -A` was skipped and origin pointed at `oracleguard`.
 - [ ] (added Sep 19, git) Optional: delete the accidental empty private repo `kapilankathirvel/oracleguard`: `gh auth refresh -h github.com -s delete_repo` then `gh repo delete kapilankathirvel/oracleguard --yes` (or GitHub → repo → Settings → Delete).
 - [ ] (added Sep 19, git) Note: `multipli` is **public**. That's fine for judges, but never commit `.env` or keys (already gitignored).
 - [ ] (added Sep 19, Phase 1) Optional: get a free Alchemy/Infura key if the keyless Tenderly gateway starts rate-limiting (only needed for heavy fuzz/invariant fork runs).
 
 ### Team (added Sep 19, team split)
 - [ ] Add **Varun** and **Jeffrey** as collaborators: github.com/kapilankathirvel/multipli → Settings → Collaborators → Add people.
-- [ ] Push the team-split commit (commands given in chat) so they can clone and see `varun.md` / `jeffrey.md`.
 - [ ] Send each of them: the repo link + "open the repo in Cursor, then tell Claude: *Read CLAUDE.md and <your-name>.md, then do the next unchecked task.*"
 - [ ] Tell both: **build only against the frozen interfaces** (`contracts/src/interfaces/IOracleGuard.sol`, `IPriceSource.sol`, `abi/`, `deployments/fork.example.json`), and never edit files outside their own ownership list.
 - [ ] Fix the **integration checkpoint time (~hour 20)**: everyone pushes by then; you run K7 (wire calendar/Pyth, `demo-up`, dashboard goes live).
@@ -32,6 +30,8 @@
 - [ ] (added Sep 19, design) Would they adopt a timelock on oracle config (our finding V5)?
 
 ## ✅ Done
+- [x] (added Sep 19) Push Phase 1 to github.com/kapilankathirvel/multipli ✅ Sep 19: pushed by Kapilan
+- [x] (added Sep 19) Push the team-split commit ✅ Sep 19: pushed by Kapilan
 - [x] (added Sep 19, Phase 1) Delete the Foundry `Counter` template files ✅ Sep 19: Claude deleted `contracts/src/Counter.sol`, `contracts/test/Counter.t.sol`, `contracts/script/Counter.s.sol`, `contracts/README.md`
 - [x] (added Sep 19) Install Foundry ✅ Sep 19: forge/anvil/cast 1.5.1 installed to `%USERPROFILE%\.foundry\bin` and added to the user PATH
 - [x] (added Sep 19, Phase 1) Get a mainnet RPC ✅ Sep 19: keyless archive RPC `https://mainnet.gateway.tenderly.co` set in `contracts/.env` (publicnode doesn't serve archive state)

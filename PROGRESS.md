@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** Phase 1 leftover M3 (`IPriceSource`, `ChainlinkSource`, `MockSource`), then Phase 2 (Aggregator → SmartOSM).
+**Next action:** kapilan.md K2 `OracleGuardAggregator`, then K3 SmartOSM.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -23,14 +23,14 @@
 - ✅ M2 `Baseline_S1`: after 7 days (Chainlink round 186h old) the legacy OSM still says valid; 31,231 rwaUSD minted against it · 1.5h
 - ✅ M2 `Baseline_S3`: feed swap → **$312,319 minted vs $43,724 collateral → $268,595 bad debt** · 1h
 - ✅ M2 `Baseline_S4`: −15% wick captured (OSM $3,716 vs true $4,372) → a 145% vault is liquidated · 1h
-- ⬜ M3 `IPriceSource`, `ChainlinkSource`, `MockSource` + tests · 1h (can start in parallel)
+- ✅ M3 `IPriceSource`, `ChainlinkSource`, `MockSource` + tests (K1) · K
 
 ## Phase 2: Core OracleGuard (hours 6–14) · A
 - ⬜ M4 `OracleGuardAggregator` + unit + fuzz · 4h
 - ⬜ M5 `SmartOSM` + tests (ABI compat with Spotter, stale, quarantine, void disabled) · 4h
 
 ## Phase 3: Controller + spell + fixes (hours 14–20) · A
-- ⬜ M6 `LineExecutor`, `HoleExecutor` · 0.5h
+- ✅ M6 `LineExecutor`, `HoleExecutor` (K1; verified on the real Vat/Dog) · K
 - ⬜ M6 `RiskController` + tests (RED/YELLOW/GREEN, guard, hysteresis, repay-always) · 2.5h
 - ⬜ M7 `Deploy.s.sol`, `Spell.s.sol` (+ rollback test) · 1h
 - ⬜ M8 `OracleGuard_S1..S4` fork tests · 2h
@@ -68,5 +68,6 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K1 done:** ChainlinkSource (fuzz found an overflow revert → guarded), MockSource, Auth, Line/Hole executors; 19/19 tests green | K2 Aggregator |
 | Sep 19 | Claude | **Phase 0 + Phase 1 M1/M2 done.** Foundry installed, harness + 3 baseline exploits green on real contracts. Found the Vat getter `dai()` is renamed `rwaUSD()` in this fork | M3 sources → Phase 2 |
 | Sep 19 | Claude | Spec review fixes: freshest-inlier score (ADR-009, demo starts GREEN), S3 math corrected (≈$312k per 10 PAXG), legacy `cur` = OSM storage slot 3 (verified), guard sets `hole=0` | Phase 0 → Baseline_S1 (Hour-6 gate) |

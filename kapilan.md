@@ -26,9 +26,9 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 ## Tasks (in order, no external dependencies)
 
 ### K1. Sources + executors (≈2h) · CONTRACTS_SPEC §1, §4
-- [ ] `sources/ChainlinkSource.sol` (try/catch, clamp check, WAD) · `sources/MockSource.sol` (implements `IMockSource`)
-- [ ] `executors/LineExecutor.sol`, `executors/HoleExecutor.sol` (implement `ILineExecutor`/`IHoleExecutor`, `AboveCap`)
-- [ ] Tests: ChainlinkSource reads ≈$4,372 on the fork, never reverts; executors change the real Vat line / Dog hole after the Safe `rely`s them
+- [x] `sources/ChainlinkSource.sol` (try/catch, clamp check, overflow guard, WAD) · `sources/MockSource.sol` (implements `IMockSource`) · shared `utils/Auth.sol`
+- [x] `executors/LineExecutor.sol`, `executors/HoleExecutor.sol` (implement `ILineExecutor`/`IHoleExecutor`, `AboveCap`)
+- [x] Tests: `test/unit/Sources.t.sol` (10 incl. fuzz never-reverts) + `test/fork/SourcesExecutors.t.sol` (5: real feed $4,372; real Vat line freeze → `Vat/ceiling-exceeded`; real Dog hole=0; caps; auth). ✅ Sep 19
 - **Commit:** `feat(sources,executors): ChainlinkSource, MockSource, bounded Line/Hole executors`
 
 ### K2. `OracleGuardAggregator` (≈4h) · §2
