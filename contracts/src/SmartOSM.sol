@@ -11,7 +11,7 @@ import {Auth} from "./utils/Auth.sol";
 /// What changes vs the legacy OSM (docs/PROBLEM.md):
 ///  - V1  staleness is no longer silent: `lastGoodAt`, `age()`, `status()` expose it (the RiskController acts on it)
 ///  - V4  zero-price invariant: after `init`, `peek()` ALWAYS returns (price > 0, true); `void()` is disabled
-///  - V5/V6 a large jump without broad agreement is quarantined and needs re-confirmation on the next hop
+///  - V5/V6 a large UPWARD jump without broad agreement is quarantined and needs confirmation on a later hop
 ///  - V12 `poke()` propagates to the Vat atomically (calls `Spotter.poke`)
 contract SmartOSM is ISmartOSM, Auth {
     struct Feed {
@@ -113,16 +113,21 @@ contract SmartOSM is ISmartOSM, Auth {
             return;
         }
 
+        // Asymmetric quarantine (ADR-011): only a low-agreement UPWARD jump is held back, because an inflated
+        // collateral price is what enables over-borrowing. Downward moves pass immediately so liquidations stay
+        // timely in a real crash (found by the Black Thursday / LUNA replays); an unfairly LOW price is handled by
+        // the RiskController's liquidation guard instead. A held-back rise is confirmed if a LATER hop still shows it.
         uint256 ref = nxt.val;
-        if (_bps(r.mid, ref) > jumpLimitBps && r.score < jumpMinScore) {
-            bool confirmed = pending != 0 && _bps(r.mid, pending) <= jumpLimitBps;
-            if (!confirmed) {
-                pending = r.mid;
-                pendingSince = uint64(block.timestamp);
-                zzz = prev(block.timestamp); // consume this hop: re-confirmation must come from a later one
-                emit Quarantined(r.mid, ref, r.score);
-                return;
-            }
+        if (r.mid > ref && _bps(r.mid, ref) > jumpLimitBps && r.score < jumpMinScore && pending == 0) {
+            // Withhold ONLY the suspicious new value; the already-vetted `nxt` still advances into `cur`,
+            // so the 1h pipeline keeps flowing (otherwise the Vat would lag the market by 2h+).
+            cur = nxt;
+            pending = r.mid;
+            pendingSince = uint64(block.timestamp);
+            zzz = prev(block.timestamp); // consume this hop: confirmation must come from a later one
+            emit Quarantined(r.mid, ref, r.score);
+            try spotter.poke(ilk) {} catch {}
+            return;
         }
 
         cur = nxt;

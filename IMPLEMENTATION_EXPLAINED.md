@@ -1,7 +1,7 @@
 # OracleGuard: what is implemented, explained file by file
 
 > Read `SOLUTION_EXPLAINED.md` first (the big picture). This file explains **every piece of code built so far**, how it works, how it's tested, and the numbers behind it, so you can answer code-level questions.
-> State as of this writing: **91 tests, all passing** (`cd contracts && forge test`).
+> State as of this writing: **101 tests, all passing** (`cd contracts && forge test`).
 
 ---
 
@@ -158,10 +158,12 @@ deployments/fork.example.json           frozen address-file schema
 1. `require(pass())`: an hour has passed since the last update.
 2. Ask the aggregator for a `Reading`.
 3. **No quorum** (`!ok`) → emit `PokeSkipped` and **return**. `cur`/`nxt` are unchanged, and `zzz` is NOT advanced, so it can be retried as soon as sources recover. `age()` keeps growing → `status() = STALE`.
-4. **Jump check:** if the new price differs from `nxt` by **> 5%** AND the score is **< 80**, it's suspicious:
-   - if an earlier quarantined value is within 5% of this one → confirmed, accept;
-   - otherwise → store it as `pending`, consume this hour, emit `Quarantined`, return. It needs a later hour to confirm it.
-   - A big move **with** score ≥ 80 (everyone agrees, e.g. a real crash) is accepted immediately.
+4. **Jump check (asymmetric, ADR-011):** only a price **rise** of **> 5%** with score **< 80** is suspicious, because an inflated collateral price is what enables over-borrowing:
+   - store it as `pending`, emit `Quarantined`. The already-checked `nxt` still moves into `cur`, so the pipeline keeps flowing. It needs a later hour to confirm it.
+   - If a later hour still shows a rise → confirmed, accept.
+   - **Price drops are never held back** (liquidations must stay timely in a crash). An unfairly low price is the guard's job.
+   - A big move **with** score ≥ 80 is accepted immediately.
+   - *Why:* the incident replay (K6b) showed the old symmetric rule froze the Vat at the pre-crash price for 4 hours during Black Thursday.
 5. **Accept:** `cur = nxt`, `nxt = new price`, update `lastGoodAt`, emit `Poke`.
 6. `try spotter.poke(ilk)`: the Vat's price updates in the same transaction.
 
@@ -244,12 +246,25 @@ deployments/fork.example.json           frozen address-file schema
 
 ---
 
-## 5. All test suites at a glance (91 tests)
+## 4b. The mentor's validation: `test/replay/Incidents.t.sol` (K6b)
+- Replays 8 historical incidents (sKRW, Compound DAI, Pyth BTC, LUNA, stale outage, **Mango**, **USDC/SVB**, **Black Thursday**) hour by hour through OracleGuard **and** the legacy OSM on the real fork.
+- Classifies every hour as false negative / true positive / false positive with the `review.md` §R2.4 definitions, and measures the extra liquidation lag and the worst-case new debt at a wrong price.
+- **Headline:**
+  - over-borrowing hours 21 → 2 (both Mango, capped at $250k);
+  - unfair-liquidation hours 5 → 1;
+  - the guard never paused liquidations in a real move;
+  - extra liquidation lag 14h → 5h.
+  - Full table: `review.md` §R2.4b.
+- **It found a real design flaw** (quarantine froze the price during real crashes). We fixed it (ADR-011) and pinned it with regression tests. Tell this story: it shows the validation is genuine.
+- Run with the price trace: `REPLAY_TRACE=true forge test --match-contract IncidentReplayTest -vv`
+
+## 5. All test suites at a glance (101 tests)
 | Suite | # | What it proves |
 |---|---|---|
 | unit/Sources (Chainlink + Mock) | 10 | conversion, never reverts (fuzz), clamp detection, auth |
 | unit/Aggregator + ParityVectors | 24 | median, outliers, staleness, quorum, freshness grace, weights, review.md examples exactly, fuzz |
-| unit/SmartOSM | 16 | Maker semantics, stale handling, quarantine + confirmation, real crash passes, void disabled, fuzz "never 0" |
+| replay/Incidents | 8 | historical incidents vs legacy: FP/FN, lag, worst-case debt (mentor review R2) |
+| unit/SmartOSM | 18 | Maker semantics, stale handling, quarantine + confirmation, real crash passes, void disabled, fuzz "never 0" |
 | unit/RiskController | 15 | every state, rate limit, YELLOW leak bound, RED repay, spam-proof upgrades, guard on/off/expiry/latch, no guard on real crash |
 | fork/Harness | 1 | our facts match mainnet |
 | fork/Baseline | 3 | the legacy exploits work |
@@ -298,7 +313,6 @@ Run everything: `cd contracts && forge test`. Verbose with logs: `forge test -vv
 ---
 
 ## 8. What is NOT built yet (so you don't claim it)
-- **K6b:** on-chain replay of the 9 historical incidents (next).
 - **K7:** integration of Varun's SessionCalendar / PythSource + the live dashboard.
 - **K8:** invariant tests.
 - **Varun:** the validation study (FP/FN numbers), the calendar, the demo scripts.

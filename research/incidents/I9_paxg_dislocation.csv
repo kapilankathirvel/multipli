@@ -1,0 +1,26 @@
+# source: reconstructed from real PAXG-XAU basis data
+# post-mortem: N/A (synthetic scenario based on observed PAXG premium/discount to NAV)
+# incident: PAXG-specific dislocation vs gold (token premium/discount)
+# class: correlated all PAXG feeds agree; token deviates from gold underlying
+# sources_wrong: all PAXG price feeds (all correctly report PAXG, not XAU)
+# correct_response: caught only with a fundamental anchor (XAU x troy-oz ratio)
+#   This is a production item / roadmap feature noted in review.md §R2.6 point 4.
+#   OracleGuard v1 would NOT catch this; it is documented as an honest limitation.
+# columns: t (unix), truth (XAU*ratio), chainlink, pyth, redstone, dex, stale_flags
+# notes: PAXG occasionally trades at a 1-3% premium or discount to gold spot.
+#   All PAXG-USD feeds correctly report PAXG market price; the dislocation is real.
+#   "Truth" here is the fundamental anchor: XAU spot * (1 troy oz / 1 PAXG).
+#   This scenario shows why a fundamental anchor source is needed.
+#   stale_flags are all 0 (all sources are fresh and consistent with each other).
+# stale_flags: 0=fresh
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1690000000,1900.0,1900.0,1900.0,1900.0,1900.0,0000
+1690003600,1900.5,1901.0,1901.0,1901.0,1901.0,0000
+1690007200,1901.0,1920.0,1920.0,1920.0,1920.0,0000
+1690010800,1901.5,1935.0,1935.0,1935.0,1934.5,0000
+1690014400,1902.0,1940.0,1940.0,1940.0,1940.0,0000
+1690018000,1902.5,1935.0,1935.0,1935.0,1934.0,0000
+1690021600,1903.0,1925.0,1925.0,1925.0,1925.0,0000
+1690025200,1903.5,1910.0,1910.0,1910.0,1910.0,0000
+1690028800,1904.0,1905.0,1905.0,1905.0,1905.0,0000
+1690032400,1904.5,1904.5,1904.5,1904.5,1904.5,0000

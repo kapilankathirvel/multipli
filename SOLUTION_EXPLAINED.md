@@ -120,7 +120,7 @@ DEX TWAP  (sim)   ┘         │            back suspicious jumps              
 **Layer 2b: SmartOSM (the safe delay).** A drop-in replacement for Maker's OSM. It keeps the exact same interface, so the real Spotter, Clipper, and End work with it unchanged. Differences:
 - Knows how old its price is (`age()`, `status()` = LIVE / STALE / QUARANTINED). **Staleness is no longer silent.**
 - **Never outputs zero** (zero-price invariant) and `void()` is disabled, so no self-destruct button.
-- A **big jump without broad agreement is quarantined**: it must be confirmed again an hour later before it's used. A big jump *with* full agreement (a real crash) goes through immediately.
+- A **big price RISE without broad agreement is quarantined**: it must be confirmed an hour later before it's used (inflated collateral is what enables over-borrowing). **Price drops are never held back**, so liquidations stay timely in a crash; unfair low prices are handled by the guard. We learned this from our own incident replay (Part 5).
 - Updates the Vat in the same transaction (no separate Spotter step).
 
 **Layer 2c: RiskController (the reflexes).** Turns health into action, using only two knobs:
@@ -187,7 +187,9 @@ The mentor asked for four things (full answers: `review.md`):
 2. **Test against real historical failures, including correlated ones, with false positives and negatives.**
    - 9 incidents: Synthetix sKRW, Compound DAI, Pyth BTC, LUNA clamp, stale feeds, **Mango** (all oracles wrong together), **USDC/SVB depeg** and **Black Thursday** (all oracles *correctly* moving together), and a PAXG-vs-gold dislocation.
    - Plus Monte-Carlo fault injection on real gold history.
-   - *Status: Varun's study (V4) + our on-chain replay (K6b), in progress.*
+   - **On-chain replay done (K6b):** over 55 simulated hours on the real contracts, over-borrowing hours went **21 → 2** (both Mango, capped at $250k), unfair-liquidation hours **5 → 1**, and the guard never blocked liquidations in a real move.
+   - **The replay caught a real flaw.** Quarantine froze the price during real crashes (Black Thursday: 4h). We fixed it (only rises are quarantined): 4h → 0h. *Tell this story: it proves the testing is real.*
+   - Varun's Python study (Monte-Carlo, threshold sweep) is still in progress.
 3. **What each state changes.** The exact table in Part 3.2, now implemented and tested.
 4. **Quantify the risk reduction.**
    - Bounds: $957k → $250k per hour (GREEN) / $50k (YELLOW) / $0 (RED).
@@ -223,7 +225,8 @@ The mentor asked for four things (full answers: `review.md`):
 | Baseline exploits on real contracts (S1, S3, S4) | Kapilan | ✅ |
 | Sources, executors, Aggregator (+ weight-based score), SmartOSM, RiskController | Kapilan | ✅ |
 | Deploy / Spell scripts (tested on a live anvil fork) + OracleGuard fork tests | Kapilan | ✅ (91 tests green) |
-| Historical incident replay on-chain (K6b), integration (K7), invariants (K8) | Kapilan | ⬜ next |
+| Historical incident replay on-chain (K6b): found and fixed the quarantine flaw | Kapilan | ✅ (101 tests) |
+| Integration (K7), invariants (K8) | Kapilan | ⬜ next |
 | Validation study (FP/FN, Monte-Carlo), SessionCalendar, demo scripts, PythSource | Varun | in progress |
 | Dashboard, deck, video | Jeffrey | in progress |
 

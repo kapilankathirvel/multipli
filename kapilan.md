@@ -64,9 +64,9 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `test(fork): OracleGuard neutralises S1-S4 on real rwaUSD`
 
 ### K6b. Mentor review R2: incident replay on the real contracts (≈1.5h)
-- [ ] `test/replay/Incidents.t.sol`: compressed inline traces (5–10 steps each) for I1–I8 from `review.md` §R2.3, fed through MockSources → SmartOSM → RiskController on the fork
-- [ ] At each step, log truth vs mid, state, guard, and mint/liquidation outcome; classify TP/FP/FN/TN with the §R2.4 definitions; print a summary table
-- [ ] Assertions: I1–I4 no FN; I7/I8 liquidations never blocked; I6 loss ≤ greenGap per hour (bounded, not detected)
+- [x] `test/replay/Incidents.t.sol`: I1–I8 hourly traces through OracleGuard AND the legacy OSM on the fork; FP/FN/TP per §R2.4 + liquidation-lag + worst-case debt; `REPLAY_TRACE=true` prints the price path
+- [x] Results in `review.md` §R2.4b: mint FN 21 → 2 (Mango only, ≤ $250k), liq FN 5 → 1, guard liq FP 0 in real moves, lag 14h → 5h
+- [x] **Found and fixed a design flaw:** symmetric quarantine froze the price during real crashes → ADR-011 (asymmetric quarantine, pipeline keeps flowing) + 2 regression unit tests. 101/101 green. ✅ Sep 19
 - **Commit:** `test(replay): historical oracle incidents on real rwaUSD (mentor review R2)`
 
 ### K7. INTEGRATION CHECKPOINT (≈1h, hour ~20): the only cross-person step

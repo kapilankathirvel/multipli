@@ -313,8 +313,16 @@ function pokeOsm(w: MockWorld, reading: Reading): void {
     w.events = pushEvent(w.events, 'PokeSkipped', `reason=NO_QUORUM score=${reading.score}`)
     return
   }
+  // ADR-011: only a low-agreement *upward* jump is held back (an unfairly low price is the
+  // guard's job). The already-vetted `nxt` still advances into `cur`, so the pipeline flows.
   const jumpBps = w.osm.nxt > 0 ? (Math.abs(reading.mid - w.osm.nxt) / w.osm.nxt) * 10_000 : 0
-  if (jumpBps > P.jumpLimitBps && reading.score < P.jumpMinScore && !w.osm.quarantined) {
+  if (
+    reading.mid > w.osm.nxt &&
+    jumpBps > P.jumpLimitBps &&
+    reading.score < P.jumpMinScore &&
+    !w.osm.quarantined
+  ) {
+    w.osm.cur = w.osm.nxt
     w.osm.quarantined = true
     w.events = pushEvent(
       w.events,

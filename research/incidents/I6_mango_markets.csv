@@ -1,0 +1,26 @@
+# source: reconstructed from post-mortems
+# post-mortem: https://rekt.news/mango-markets-rekt/
+# incident: Mango Markets MNGO manipulation, October 2022
+# class: CORRELATED manipulation - all oracles tracked the manipulated spot price
+# sources_wrong: ALL (FTX/Pyth/Switchboard all followed the manipulated market)
+# correct_response: cannot be detected by consensus. Loss must be BOUNDED.
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: MNGO price was manipulated from ~$0.04 to ~$0.91 via spot buying.
+#   ALL oracle sources (Pyth, Switchboard, FTX) tracked the manipulated market.
+#   No median filter can detect this: the manipulation IS the market price.
+#   The "truth" here is the pre-attack fundamental value.
+#   OracleGuard's answer: bound max loss per hour via greenGap rate limit.
+#   This is an honest FN: OracleGuard would be GREEN with a wrong (manipulated) price.
+# stale_flags: 0=fresh, 1=stale (chainlink,pyth,redstone,dex)
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1665532800,0.037,0.037,0.037,0.037,0.037,0000
+1665536400,0.037,0.040,0.040,0.040,0.040,0000
+1665540000,0.037,0.100,0.100,0.100,0.100,0000
+1665543600,0.037,0.300,0.300,0.300,0.300,0000
+1665547200,0.037,0.650,0.650,0.650,0.650,0000
+1665550800,0.037,0.910,0.910,0.910,0.910,0000
+1665554400,0.037,0.910,0.910,0.910,0.910,0000
+1665558000,0.037,0.600,0.600,0.600,0.600,0000
+1665561600,0.037,0.200,0.200,0.200,0.200,0000
+1665565200,0.037,0.060,0.060,0.060,0.060,0000
+1665568800,0.037,0.038,0.038,0.038,0.038,0000

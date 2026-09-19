@@ -1,0 +1,24 @@
+# source: real on-chain + post-mortem
+# post-mortem: https://rekt.news/venus-blizz-rekt/ and Venus/Blizz protocol reports
+# incident: Chainlink LUNA/USD minAnswer clamp during LUNA crash, May 2022
+# class: single-source clamp during a real crash (Chainlink floor was $0.10)
+# sources_wrong: 1 (Chainlink clamped; other sources followed the real crash)
+# correct_response: reject clamped source; follow the real crash (allow liquidations)
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: LUNA dropped from ~$30 to ~$0.0001 within hours.
+#   Chainlink was clamped at its minAnswer of ~$0.10 (aggregator floor).
+#   Venus/Blizz incurred massive bad debt because Chainlink reported $0.10 when truth was $0.001.
+#   RedStone reconstructed from post-mortem description.
+# stale_flags: 0=fresh, 1=stale
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1652400000,10.00,10.00,10.00,10.00,10.00,0000
+1652403600,5.00,5.00,5.00,5.00,5.00,0000
+1652407200,2.00,2.00,2.00,2.00,2.00,0000
+1652410800,0.50,0.50,0.50,0.50,0.50,0000
+1652414400,0.10,0.10,0.10,0.10,0.10,0000
+1652418000,0.05,0.10,0.05,0.05,0.05,0000
+1652421600,0.01,0.10,0.01,0.01,0.01,0000
+1652425200,0.005,0.10,0.005,0.005,0.005,0000
+1652428800,0.001,0.10,0.001,0.001,0.001,0000
+1652432400,0.0005,0.10,0.0005,0.0005,0.0005,0000
+1652436000,0.0002,0.10,0.0002,0.0002,0.0002,0000

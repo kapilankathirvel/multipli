@@ -1,0 +1,16 @@
+# source: real,reconstructed
+# post-mortem: https://blog.synthetix.io/response-to-oracle-incident/
+# incident: Synthetix sKRW oracle 1000x spike, June 2019
+# class: single-source spike
+# sources_wrong: 1
+# correct_response: ignore outlier, stay GREEN or YELLOW
+# columns: t (unix), truth, chainlink, pyth, redstone, dex, stale_flags
+# notes: Pyth/RedStone did not exist in 2019; reconstructed as truth value
+# stale_flags: 0=fresh, 1=stale, per source (chainlink,pyth,redstone,dex)
+t,truth,chainlink,pyth,redstone,dex,stale_flags
+1561680000,1.00,1000.00,1.00,1.00,1.00,0000
+1561683600,1.00,1000.00,1.00,1.00,1.00,0000
+1561687200,1.00,1.00,1.00,1.00,1.00,0000
+1561690800,1.00,1.00,1.00,1.00,1.00,0000
+1561694400,1.00,1.00,1.00,1.00,1.00,0000
+1561698000,1.00,1.00,1.00,1.00,1.00,0000

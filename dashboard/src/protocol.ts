@@ -18,7 +18,7 @@ export const P = {
   // SmartOSM
   staleLimitSec: 7200, // 2h -> status STALE
   hopSec: 3600,
-  jumpLimitBps: 500, // 5%
+  jumpLimitBps: 500, // 5% -- only UPWARD jumps are quarantined (ADR-011)
   jumpMinScore: 80,
   // RiskController (review.md R3)
   greenScore: 80,

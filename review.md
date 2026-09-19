@@ -8,7 +8,7 @@ It contains **four asks**. Each gets a precise answer, a deliverable, an owner, 
 | # | Ask | Deliverable | Owner | Status |
 |---|---|---|---|---|
 | R1 | Define the score + each oracle's contribution | §R1 below + weight-based `Wq` in the contract (K2.1) + contribution column in the UI | Kapilan (contract), Jeffrey (UI) | 🟨 contract ✅ (parity vectors pass), UI pending |
-| R2 | Test against real historical failures incl. correlated ones; report FP/FN | Python validation study (Varun V4) + Solidity incident replay on the real contracts (Kapilan K6b) → `research/RESULTS.md` | Varun, Kapilan | ⬜ |
+| R2 | Test against real historical failures incl. correlated ones; report FP/FN | Python validation study (Varun V4) + Solidity incident replay on the real contracts (Kapilan K6b) → `research/RESULTS.md` | Varun, Kapilan | 🟨 on-chain replay ✅ (§R2.4b: mint FN 21 → 2, liq FN 5 → 1), Python study pending |
 | R3 | Specify exactly what GREEN/YELLOW/RED changes | §R3 below (parameter-level table) + UI panel | Kapilan (spec+contract), Jeffrey (UI) | 🟨 spec ✅ + contract ✅ (`RiskController`, 15 tests), UI pending |
 | R4 | Quantify the risk reduction | §R4: deterministic bounds now, measured numbers from R2 | Varun (numbers), Jeffrey (slide) | 🟨 bounds done, measurement pending |
 
@@ -112,6 +112,35 @@ Each source *i* reports `(price_i, updatedAt_i, ok_i)` and has a governance-set 
   - **FN:** healthy-at-truth vault liquidatable because of a wrong price AND guard off.
   - **FP (dangerous):** guard on while vaults are truly unsafe (it delays needed liquidations; bounded by the 6h expiry).
 - Reported per incident **and** as rates over the Monte-Carlo run, plus a **threshold sweep** (GREEN cut 70/80/90, ε 1/1.5/3%) so we show why the chosen thresholds sit where they do.
+
+### R2.4b ✅ RESULTS: on-chain incident replay on the real rwaUSD contracts (K6b, `contracts/test/replay/Incidents.t.sol`)
+55 hourly steps across 8 incidents, each replayed through OracleGuard (Aggregator → SmartOSM → RiskController → real Vat/Dog) **and** the legacy OSM side by side. Incident shapes are reconstructed from post-mortems and scaled onto PAXG. In single-source incidents the fault sits on Chainlink, the legacy protocol's only feed.
+
+| Incident | OG mint FN | Legacy mint FN | OG liq FN | Legacy liq FN | OG liq FP | OG "RED while fine" (user cost) | Extra liquidation lag h (OG / legacy) | Max new debt at a wrong price (OG / legacy) |
+|---|---|---|---|---|---|---|---|---|
+| I1 sKRW 1000× (1 feed) | **0** | 2 | 0 | 0 | 0 | 0 (4 h YELLOW) | 0 / 2 | $0 / $956,970 |
+| I2 Compound DAI −23% (1 feed) | **0** | 0 | **0** | 1 | 0 | 0 (3 h YELLOW) | 0 / 0 | $0 / $0 |
+| I3 Pyth BTC −90% (1 feed) | **0** | 0 | **0** | 1 | 0 | 0 (3 h YELLOW) | 0 / 0 | $0 / $0 |
+| I4 LUNA clamp in a real crash | **0** | 6 | 0 | 0 | 0 | 1 | **0 / 3** | $0 / $956,970 |
+| I5 stale outage (1 → all) | **0** | 4 | 0 | 0 | 0 | 1 | 2 / 3 (no data exists) | $0 / $956,970 |
+| I6 **Mango: all oracles manipulated** | 2 ⚠️ | 3 | 0 | 0 | 2 ⚠️ | 0 | 3 / 3 | **$250,000** / $956,970 |
+| I7 USDC/SVB true −12% move | **0** | 2 | 0 | 2 | **0** | 2 | 0 / 0 | $0 / $956,970 |
+| I8 Black Thursday −43%, 1 oracle lags | **0** | 4 | 1 | 1 | **0** | 3 | **0 / 3** | $0 / $956,970 |
+| **Total (55 steps)** | **2** | **21** | **1** | **5** | **2** | **7** | **5 / 14** | **≤ $250k/h / $956,970** |
+
+**Reading the table:**
+- **Over-borrowing risk (mint FN):** 21 steps under legacy → **2** under OracleGuard, and both are Mango, the correlated-manipulation limit we declared up front. Even there the exposure is capped at the hourly $250k budget vs ≈$957k.
+- **Unfair liquidations (liq FN):** 5 → 1. The remaining one is I8's rebound hour: one oracle still lags, so agreement is too low to arm the guard. We keep the guard deliberately conservative (it needs ≥ 80) to avoid the opposite error.
+- **Guard wrongly pausing needed liquidations (liq FP):** 0 in real moves (I4, I7, I8). **2 in Mango**, because a correlated manipulation fools the guard as well (known limit; the guard auto-expires in ≤ 6h).
+- **Cost to users:** 7 hourly steps of RED while the price was fine, all right after real crashes (hysteresis: relax slowly). Single-source faults only cost YELLOW hours (borrowing capped, not frozen).
+- **Liquidation lag beyond the designed 1h delay:** 14 → 5. The remainder is I5 (no source has data; nobody can follow the market) and I6 (manipulated sources).
+
+**The replay found a real weakness, which we fixed (ADR-011).** The first run showed that in I4 (LUNA) and I8 (Black Thursday), SmartOSM quarantined *every* hour of a real crash because one oracle lagged. The Vat kept the pre-crash price for 4 hours, so liquidations couldn't fire. Fix:
+1. quarantine only **upward** low-agreement jumps (downward moves pass; unfairly low prices are the guard's job);
+2. confirm a held-back rise if a later hop still shows it;
+3. while a value is held back, the already-vetted `nxt` still advances into `cur`.
+
+Result: I8 extra lag **4h → 0h**, I4 → 0h. Regression tests pin this.
 
 ### R2.5 Monte-Carlo fault injection (on real PAXG/XAU history)
 Faults injected into k of the 4 sources, with k ∈ {1,2,3,4} to cover **correlated** cases: spike (±5…90%), drift (slow bias), freeze (stale), clamp, delay. Output: a FP/FN matrix by fault type × k, and bad debt with vs without OracleGuard.

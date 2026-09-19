@@ -181,6 +181,36 @@ contract SmartOSMTest is Test {
         assertEq(_nxt(), P * 85 / 100, "real crashes must not be delayed by quarantine");
     }
 
+    // ---------------------------------------------------------------- ADR-011: asymmetric quarantine
+
+    function test_lowAgreementDrop_isNotQuarantined() public {
+        _nextHop();
+        // Real crash while Chainlink lags (outlier): score 71 < 80, -15% jump. Must pass so liquidations stay timely.
+        pyth.setPrice(P * 85 / 100);
+        red.setPrice(P * 85 / 100);
+        dex.setPrice(P * 85 / 100);
+        osm.poke();
+        assertEq(_nxt(), P * 85 / 100);
+        assertEq(osm.pending(), 0);
+        assertEq(osm.status(), osm.LIVE());
+    }
+
+    function test_sustainedRise_confirmedEvenIfStillMoving() public {
+        _nextHop();
+        pyth.setPrice(P * 11 / 10);
+        red.setPrice(P * 11 / 10);
+        osm.poke(); // +10%, low agreement -> held back
+        assertEq(osm.pending(), P * 11 / 10);
+        _nextHop();
+        pyth.setPrice(P * 125 / 100);
+        red.setPrice(P * 125 / 100);
+        cl.setPrice(P);
+        dex.setPrice(P);
+        osm.poke(); // still rising on a later hop -> confirmed and accepted
+        assertGt(_nxt(), P);
+        assertEq(osm.pending(), 0);
+    }
+
     // ---------------------------------------------------------------- V4: zero-price trap removed
 
     function test_void_disabled() public {
