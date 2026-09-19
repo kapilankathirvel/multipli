@@ -98,7 +98,6 @@ Wraps `IPyth.getPriceUnsafe(id)`, converts `expo` to WAD, `conf` to WAD, `publis
 struct SourceCfg { IPriceSource src; uint16 weight; uint32 maxAge; }
 SourceCfg[] public sources;          // ≤ 5
 uint16  public quorumMin;            // e.g. 2   (hard floor: fewer fresh inliers → score 0)
-uint16  public nExpected;            // e.g. 4
 uint16  public dMaxBps;              // dispersion at which W_d hits 0, e.g. 200 (2%)
 uint16  public madK;                 // outlier multiplier, e.g. 3
 uint16  public madFloorBps;          // min MAD as bps of median, e.g. 10 (0.1%)
@@ -126,7 +125,7 @@ function observations() external view returns (Observation[] memory obs, bool[] 
 3. `MAD` = plain median of `|p - m0|`; `thr = madK * max(MAD, m0 * madFloorBps / 1e4)`. Inlier if `|p - m0| <= thr`.
 4. `mid` = weighted median of inliers; `lo/hi` = min/max inlier; `d = (hi - lo) * 1e4 / mid` (bps).
 5. Score (integer maths, 0–100):
-   - `Wq = min(1e4, nInliers * 1e4 / nExpected)`
+   - `Wq = inlierWeight * 1e4 / totalWeight()` (weight-based, review.md §R1; `totalWeight()` is a public view)
    - `Wd = d >= dMaxBps ? 0 : 1e4 - d * 1e4 / dMaxBps`
    - `Wf`: `a` = age of the **freshest** inlier, `M` = that source's maxAge. `Wf = a <= M/2 ? 1e4 : 1e4 - min(1e4, (a - M/2) * 1e4 / (M/2))` (grace band then linear). **Do not use the oldest age**: at the fork block Chainlink is ≈16.5h old, and an oldest-based Wf would boot the demo into RED.
    - `score = 100 * Wq * Wd * Wf / 1e12`

@@ -12,7 +12,7 @@ import {Auth} from "./utils/Auth.sol";
 ///   inlier_i = |p_i - m0| <= madK * max(MAD, m0 * madFloor)          (MAD = median |p_i - m0|)
 ///   mid      = weighted median of inliers;  lo/hi = min/max inlier;  d = (hi - lo) / mid
 ///   score    = 100 * Wq * Wd * Wf
-///     Wq = min(1, nInliers / nExpected)           sources alive and agreeing
+///     Wq = Σ weight(inliers) / Σ weight(all)    each oracle contributes its weight share (mentor review R1)
 ///     Wd = max(0, 1 - d / dMax)                   how tightly they agree
 ///     Wf = 1 while the FRESHEST inlier is <= maxAge/2 old, then linear to 0   (ADR-009)
 ///   ok = nInliers >= quorumMin   (otherwise score = 0)
@@ -32,7 +32,6 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
     SourceCfg[] internal sources;
 
     uint256 public quorumMin = 2; // fewer inliers than this => ok = false, score = 0
-    uint256 public nExpected = 4; // inliers needed for full Wq
     uint256 public dMaxBps = 200; // dispersion (hi-lo)/mid at which Wd reaches 0 (2%)
     uint256 public madK = 3; // outlier threshold multiplier
     uint256 public madFloorBps = 10; // MAD floor as bps of the median (0.1%), so identical sources don't zero the band
@@ -65,9 +64,6 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
         if (what == "quorumMin") {
             if (data == 0) revert BadParam();
             quorumMin = data;
-        } else if (what == "nExpected") {
-            if (data == 0) revert BadParam();
-            nExpected = data;
         } else if (what == "dMaxBps") {
             if (data == 0) revert BadParam();
             dMaxBps = data;
@@ -83,6 +79,13 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
     }
 
     // ---------------------------------------------------------------- views
+
+    /// @notice Sum of all configured weights; source i contributes weight_i / totalWeight to price and confidence.
+    function totalWeight() public view returns (uint256 w) {
+        for (uint256 i; i < sources.length; ++i) {
+            w += sources[i].weight;
+        }
+    }
 
     function sourceCount() external view returns (uint256) {
         return sources.length;
@@ -120,7 +123,7 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
 
         // 2-3. robust centre + MAD outlier filter (inliers stay sorted by price)
         _sortByPrice(idx, nFresh, obs);
-        (uint256[] memory inl, uint256 nInl) = _inliers(idx, nFresh, obs, inlier);
+        (uint256[] memory inl, uint256 nInl, uint256 inlierWeight) = _inliers(idx, nFresh, obs, inlier);
         r.nInliers = uint8(nInl);
 
         // 4. band
@@ -132,7 +135,7 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
 
         // 5. score
         r.ok = nInl >= quorumMin;
-        if (r.ok) r.score = _score(nInl, r.lo, r.mid, r.hi, r.freshestAge, freshestMaxAge);
+        if (r.ok) r.score = _score(r, inlierWeight, freshestMaxAge);
     }
 
     function _observeAll(uint256 n)
@@ -162,7 +165,7 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
     function _inliers(uint256[] memory idx, uint256 nFresh, Observation[] memory obs, bool[] memory inlier)
         internal
         view
-        returns (uint256[] memory inl, uint256 nInl)
+        returns (uint256[] memory inl, uint256 nInl, uint256 inlierWeight)
     {
         uint256 m0 = _weightedMedian(idx, nFresh, obs);
         uint256[] memory dev = new uint256[](nFresh);
@@ -179,6 +182,7 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
             if (_absDiff(obs[i].price, m0) <= thr) {
                 inlier[i] = true;
                 inl[nInl++] = i;
+                inlierWeight += sources[i].weight;
             }
         }
     }
@@ -197,13 +201,10 @@ contract OracleGuardAggregator is IOracleGuardAggregator, Auth {
         age = uint64(best);
     }
 
-    function _score(uint256 nInl, uint256 lo, uint256 mid, uint256 hi, uint256 age, uint256 maxAge)
-        internal
-        view
-        returns (uint16)
-    {
-        uint256 wq = nInl >= nExpected ? BPS : nInl * BPS / nExpected;
-        uint256 dBps = (hi - lo) * BPS / mid;
+    function _score(Reading memory r, uint256 inlierWeight, uint256 maxAge) internal view returns (uint16) {
+        uint256 wq = inlierWeight * BPS / totalWeight();
+        uint256 dBps = (r.hi - r.lo) * BPS / r.mid;
+        uint256 age = r.freshestAge;
         uint256 wd = dBps >= dMaxBps ? 0 : BPS - dBps * BPS / dMaxBps;
         uint256 half = maxAge / 2;
         uint256 wf = age <= half ? BPS : BPS - _min(BPS, (age - half) * BPS / (half == 0 ? 1 : half));

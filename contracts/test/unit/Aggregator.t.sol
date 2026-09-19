@@ -224,3 +224,86 @@ contract AggregatorTest is Test {
         (s,,) = agg.sourceAt(agg.sourceCount() - 1);
     }
 }
+
+/// @notice review.md §R1.4 parity vectors: the Python model (research/og_model.py) must reproduce these exactly.
+///         Demo weights: Chainlink 2, Pyth 2, RedStone 2, DEX 1 (total 7).
+contract AggregatorParityVectorsTest is Test {
+    OracleGuardAggregator agg;
+    MockSource cl;
+    MockSource pyth;
+    MockSource red;
+    MockSource dex;
+    uint256 constant P = 4372478143390000000000; // $4,372.47814339 (legacy OSM cur at the fork block)
+
+    function setUp() public {
+        vm.warp(10_000_000);
+        agg = new OracleGuardAggregator();
+        cl = new MockSource("chainlink");
+        pyth = new MockSource("pyth");
+        red = new MockSource("redstone");
+        dex = new MockSource("dex");
+        agg.addSource(IPriceSource(address(cl)), 2, 25 hours);
+        agg.addSource(IPriceSource(address(pyth)), 2, 1 hours);
+        agg.addSource(IPriceSource(address(red)), 2, 1 hours);
+        agg.addSource(IPriceSource(address(dex)), 1, 1 hours);
+    }
+
+    function _set(uint256 a, uint256 b, uint256 c, uint256 d) internal {
+        cl.setPrice(a);
+        pyth.setPrice(b);
+        red.setPrice(c);
+        dex.setPrice(d);
+    }
+
+    function test_totalWeight() public view {
+        assertEq(agg.totalWeight(), 7);
+    }
+
+    function test_Va_allAgree() public {
+        _set(P, P, P, P);
+        Reading memory r = agg.read();
+        assertEq(r.mid, P);
+        assertEq(r.score, 100);
+    }
+
+    function test_Vb_dexTimes10() public {
+        _set(P, P, P, P * 10);
+        Reading memory r = agg.read();
+        assertEq(r.mid, P);
+        assertEq(r.score, 85, "Wq = 6/7: thin-pool glitch stays GREEN");
+    }
+
+    function test_Vc_chainlinkStale() public {
+        _set(P, P, P, P);
+        cl.set(P, 0, uint64(block.timestamp - 26 hours), true);
+        Reading memory r = agg.read();
+        assertEq(r.mid, P);
+        assertEq(r.score, 71, "Wq = 5/7 -> YELLOW");
+    }
+
+    function test_Vd_halfPercentSplit() public {
+        _set(P, P, P * 1005 / 1000, P * 1005 / 1000);
+        Reading memory r = agg.read();
+        assertEq(r.mid, P);
+        assertEq(r.score, 75, "Wd = 0.75");
+    }
+
+    function test_Ve_twoMajorsWrong() public {
+        _set(P, P * 12 / 10, P * 12 / 10, P);
+        Reading memory r = agg.read();
+        assertEq(r.mid, P * 12 / 10, "wrong majority wins the median (correlated failure)");
+        assertEq(r.score, 0, "d = 16.7% >= 2% -> RED");
+    }
+
+    function test_contributionTable() public {
+        // review.md §R1.3: losing one major = 71, one major + DEX = 57, two majors = 42
+        _set(P, P, P, P);
+        pyth.setOk(false);
+        assertEq(agg.read().score, 71);
+        dex.setOk(false);
+        assertEq(agg.read().score, 57);
+        dex.setOk(true);
+        red.setOk(false);
+        assertEq(agg.read().score, 42);
+    }
+}

@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K2.1 (weight-based Wq, mentor review R1), then K3 `SmartOSM`. Mentor review plan: `review.md`.
+**Next action:** kapilan.md K3 `SmartOSM`, then K4 RiskController (with the rate-limited GREEN headroom from review.md §R3). Mentor review plan: `review.md`.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K2.1 done:** weight-based Wq; all review.md parity vectors pass in Solidity (100/85/71/75/0) | K3 SmartOSM |
 | Sep 19 | Claude | **Mentor review #1** captured in `review.md` (score definition, historical validation FP/FN, state effects, risk reduction); tasks added: K2.1, K4 rate limit, K6b replay (K), V4 validation study now top priority (V), contribution/state panels + 3 slides (J) | K2.1 |
 | Sep 19 | Claude | **K2 done:** Aggregator (median/MAD/score), 21 tests; demo starts at score 100; 40/40 suite green | K3 SmartOSM |
 | Sep 19 | Claude | **K1 done:** ChainlinkSource (fuzz found an overflow revert → guarded), MockSource, Auth, Line/Hole executors; 19/19 tests green | K2 Aggregator |

@@ -116,17 +116,17 @@ fresh_i  = ok_i && now - updatedAt_i ≤ maxAge_i
 m0       = weightedMedian(fresh prices)
 MAD      = median(|p_i − m0|);  inlier_i ⇔ |p_i − m0| ≤ k·max(MAD, m0·floor)
 mid      = weightedMedian(inliers); lo = min; hi = max; d = (hi − lo)/mid
-Wq = min(1, nInliers / nExpected)
+Wq = Σ weight(inliers) / Σ weight(all sources)      (each oracle contributes its weight share; review.md §R1)
 Wd = max(0, 1 − d / dMax)
 a  = age of the FRESHEST inlier (dropouts are already penalised by Wq, disagreement by Wd)
 Wf = 1 if a ≤ maxAge/2, else max(0, 1 − (a − maxAge/2)/(maxAge/2))   (grace band, then linear)
 score = round(100 · Wq · Wd · Wf);  score = 0 and ok = false if nInliers < quorumMin
 ```
-Defaults (PAXG): nExpected 4, quorumMin 2, k 3, floor 0.1%, dMax 2%, maxAge 1h for mocks / 25h for Chainlink (its heartbeat is long; see ONCHAIN_FACTS §3).
+Defaults (PAXG): weights Chainlink 2 / Pyth 2 / RedStone 2 / DEX 1 (total 7), quorumMin 2, k 3, floor 0.1%, dMax 2%, maxAge 1h for mocks / 25h for Chainlink (its heartbeat is long; see ONCHAIN_FACTS §3).
 Thresholds: GREEN ≥ 80, YELLOW 50–79, RED < 50.
 
 Sanity check at the fork block: Chainlink's round is ≈16.5h old but within its 25h maxAge, and the mocks are fresh, so Wq 1 × Wd ≈1 × Wf 1 gives **≈100 → GREEN** (the demo must start GREEN).
-Worked example: Chainlink beyond 25h (stale), 3 mocks agree within 0.2%: Wq 0.75 × Wd 0.9 × Wf 1 gives **≈68 → YELLOW**. Lending continues with tighter headroom ("one stale source doesn't halt lending").
+Worked example: Chainlink beyond 25h (stale), the other 3 agree: Wq 5/7 × Wd 1 × Wf 1 gives **71 → YELLOW**. DEX outlier only: 6/7 gives **85 → GREEN**. Full contribution table + parity vectors: `review.md` §R1.3–R1.4. Lending continues with tighter headroom ("one stale source doesn't halt lending").
 
 ## 6. Deployment spell (impersonated Admin Safe on fork)
 

@@ -38,9 +38,9 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(aggregator): weighted median, MAD outliers, confidence score 0-100`
 
 ### K2.1. Mentor review R1: weight-based confidence (≈0.5h) · see `review.md` §R1
-- [ ] `Wq = min(1, Σ w_inliers / Σ w_all)` (replace the count-based `nExpected`; keep `quorumMin` as a count)
-- [ ] Unit tests reproduce the **parity vectors in review.md §R1.4** exactly (100 / 85 / 71 / 75 / 0); update the existing tests' expected scores
-- [ ] Update `docs/ARCHITECTURE.md` §5 and `docs/CONTRACTS_SPEC.md` §2 to the weight-based formula
+- [x] `Wq = Σ w_inliers / Σ w_all` (`nExpected` removed; `quorumMin` stays a count); new `totalWeight()` view
+- [x] `AggregatorParityVectorsTest`: all 5 parity vectors (100 / 85 / 71 / 75 / 0) + the contribution table (71 / 57 / 42) match exactly
+- [x] `docs/ARCHITECTURE.md` §5 and `docs/CONTRACTS_SPEC.md` §2 updated. ✅ Sep 19
 - **Commit:** `feat(aggregator): weight-based confidence (mentor review R1)`
 
 ### K3. `SmartOSM` (≈4h) · §3
