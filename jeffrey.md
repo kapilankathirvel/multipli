@@ -46,7 +46,7 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - [x] **Mentor review R3:** `components/StateEffects.tsx` — "What this state changes" renders the `review.md` §R3 row for the current state (borrow ✅/⚠️/❌, repay ✅, liquidations ✅/⏸️, `Vat.line`, `Dog.hole`, "`Spotter.mat` never touched")
 - **Commit:** `feat(dashboard): Oracle War Room panels`
 
-### J3. Scenario controls (≈1.5h), your own code, no keeper needed — ✅ done (live path untested, no Foundry on this machine)
+### J3. Scenario controls (≈1.5h), your own code, no keeper needed — ✅ done, verified live on a mainnet fork (Sep 19)
 - [x] `src/scenarios.ts` using viem **test actions** against anvil (`increaseTime`, `mine`, `snapshot`, `revert`, `impersonateAccount`) + `IMockSource.setPrice` + `smartOsm.poke()` + `controller.sync(ilk)`
 - [x] Buttons (`components/ScenarioBar.tsx`): Reset · S1 · S2 · S3 · S4 · Poke · Sync · Warp +1h, one `Runner` interface with a mock and a live implementation; busy state, and a status line that shows the revert reason when a tx fails
 - [x] In mock mode the buttons drive the simulated world (`applyScript`), so it all styles and demos without a chain
@@ -72,7 +72,8 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 
 ### J6. Go live + video (≈1h, after the integration checkpoint)
 > ✅ Integration checkpoint passed (K7): Deploy + Spell work end-to-end on anvil and write `deployments/fork.json` with the keys your dashboard expects. Until Varun's demo-up lands, bring the fork up manually with the commands in `contracts/script/Deploy.s.sol` / `Spell.s.sol` headers (or `docs/TECH_STACK.md`), then copy `deployments/fork.json` to `dashboard/public/fork.json`.
-- [ ] `VITE_MODE=live` against Kapilan's running fork → click through S1–S4 → record the 3-min video (`docs/DEMO_SCRIPT.md` §A); link it in README + deck
+- [x] `VITE_MODE=live` against a running fork → click through S1–S4 ✅ Sep 19: all 8 buttons pass on a mainnet fork, headless and in Chrome (`dashboard/DASHBOARD.md` §10)
+- [ ] Record the 3-min video (`docs/DEMO_SCRIPT.md` §A) against the live fork; link it in README + deck
 - **Commit:** `docs: demo video link`
 
 ## Budget ≈9h (incl. mentor review items).
@@ -80,6 +81,24 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 ---
 
 ## Progress log (newest first)
+
+### Sep 19 — Foundry installed, live end-to-end verified, `DASHBOARD.md`
+**Tooling:** Foundry **v1.5.1** (same as Kapilan) installed from the official `foundry-rs/foundry` release to `%USERPROFILE%\.foundry\bin`, added to the user PATH; zip SHA-256 checked against GitHub's recorded digest. solc 0.8.24 auto-downloaded on first build. No other chain tooling needed.
+
+**Live run:** anvil fork of mainnet @ 26,011,000 (Tenderly archive RPC) → `Deploy.s.sol` → `Spell.s.sol` as the impersonated Admin Safe → verified `Spotter.pip` = SmartOSM, GREEN, score 100, line $293,029. Then every button, headless (the dashboard's own `data.ts` + `scenarios.ts` from Node) and clicked in Chrome against `pnpm dev --mode live`. Results match `docs/DEMO_SCRIPT.md` §D: S1 RED/STALE + S1 banner · S2 RED, score 71 · S3 YELLOW + legacy $43,724.78 + S3 banner · S4 GREEN + 🛡️, OSM cur $3,716.61 · Poke/Sync/Warp/Reset ✓. UI `Wq·Wd·Wf` = contract score in every state.
+
+**Bugs the live run found (fixed, all in `dashboard/`):**
+| Bug | Fix |
+|---|---|
+| viem caches `getBlockNumber()` ~4s → after a button, ages + event-log range used the previous block (S1 ages didn't move) | `getBlockNumber({ cacheTime: 0 })` in `src/data.ts` |
+| S3 compromised a mock the legacy stack never reads → no legacy contrast, banner never fired | `src/scenarios.ts` also writes `Baseline_S3`'s end state (10× `cur`) into the legacy OSM via `anvil_setStorageAt`; Reset reverts it |
+| event log printed raw WAD/RAD integers + bytes32 ilk | `formatEventArg()` in `src/data.ts` → `$`, state names |
+| Chainlink maxAge shown as "1.0d" | whole hours ("25h") in `SourcesTable.tsx` |
+| stale feeds labelled "outlier"; Wf said "0s old" with no inliers | "not checked" pill; "no inliers to measure" |
+| buttons' accessible name was the tooltip | `aria-label` in `ScenarioBar.tsx` |
+
+**Also:** `dashboard/DASHBOARD.md` (new, full guide) · `dashboard/.gitignore` ignores `public/fork.json` · README points to it. Deploy/Spell docs now use `--slow` (burst-sent txs got stuck "queued" in anvil's mempool on this fork).
+
 
 ### Sep 19 — J3 + J4 complete
 **Built / changed** (all inside `dashboard/`):

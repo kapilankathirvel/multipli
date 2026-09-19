@@ -52,7 +52,9 @@
 
 ### Dashboard (Jeffrey, added Sep 19 — J1–J4)
 - [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1, then click every scenario button (Reset · S1–S4 · Poke · Sync · Warp). They also work from DevTools: `og('s1')`, `og('s3')`, `og('reset')`, …
-- [ ] ⚠️ **The live (anvil) path of the scenario buttons has never been run** — Foundry isn't installed on this machine, so J3 was verified in mock mode only. First thing in J6 (or whenever anvil is up): `demo-up` → `VITE_MODE=live` → click through Reset/S1–S4 and fix whatever the status line reports. Budget ~15 min.
+- [ ] (Kapilan/Varun) Use `--slow` on `forge script Deploy/Spell` against anvil (and in `scripts/demo-up`): without it, Deploy's 28-tx burst left the last 3 txs stuck "queued" in anvil's mempool on the mainnet fork and forge hung waiting for receipts. Details: `dashboard/DASHBOARD.md` §7.2 / §9.
+- [ ] (Varun) `foundry.zip` (83 MB) was committed to the repo root in `134c1ef session calendar` — probably by accident; consider removing it and adding `*.zip` to `.gitignore`.
+- [ ] Before recording the J6 video: fresh anvil fork → Deploy + Spell (`--slow`) → copy `deployments/fork.json` to `dashboard/public/fork.json` → `pnpm dev --mode live` (use the URL Vite prints) → Reset before each scenario.
 - [ ] (Kapilan) Live mode drives the demo by sending `MockSource.setPrice` from **anvil account #0** (impersonated). If the deploy ever stops leaving account #0 as the mocks' ward, the buttons stop working — tell Jeffrey.
 - [ ] (Jeffrey, from K6b) Put the `review.md` §R2.4b replay table on the mentor "validation" slide in J5 — it replaces the placeholder. (The mock's quarantine already follows ADR-011: asymmetric, `cur` keeps advancing.)
 
@@ -63,6 +65,7 @@
 - [ ] (added Sep 19, design) Would they adopt a timelock on oracle config (our finding V5)?
 
 ## ✅ Done
+- [x] (added Sep 19, J3) Run the live (anvil) path of the scenario buttons ✅ Sep 19: Foundry v1.5.1 installed; mainnet fork + Deploy + Spell; all 8 buttons pass headless and in Chrome; 4 bugs found and fixed (stale head block, S3 had no legacy contrast, raw event log, labels). Results: `dashboard/DASHBOARD.md` §10.
 - [x] (added Sep 19, Jeffrey) Confirm `fork.json` source keys match the dashboard ✅ Sep 19: `Deploy.s.sol` writes `oracleguard.sources.{chainlink,pyth,redstone,dexTwap}` (Kapilan verified it on the anvil smoke test) — exactly what `dashboard/src/data.ts` and `src/scenarios.ts` expect, no change needed.
 - [x] (added Sep 19, J1/J2) Commit the dashboard (`dashboard/` was untracked) ✅ Sep 19: commit `feat(dashboard): scaffold with mock/live data layer + Oracle War Room panels (mentor review R1/R3)`
 - [x] (added Sep 19, J1/J2) Confirm the R3 controller numbers hard-coded in `dashboard/src/protocol.ts` match the real deploy ✅ Sep 19: checked against K5's `script/DeployLib.sol` — greenGap 250,000 · yellowGap 50,000 · greenScore 80 · yellowScore 50 · epsBps 150 · epsLiqBps 300 · guard 6h · refill 1h · weights 2/2/2/1 (25h/1h/1h/1h) all identical. Re-check if `setIlk` config changes.
