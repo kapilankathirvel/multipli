@@ -1,0 +1,8 @@
+.env
+**/.env
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+node_modules/
+dist/
+deployments/*.local.json

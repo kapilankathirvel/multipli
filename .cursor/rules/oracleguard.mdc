@@ -1,0 +1,8 @@
+---
+description: OracleGuard project context and rules
+alwaysApply: true
+---
+Before any task, read `CLAUDE.md` (project summary, invariants, verified constants) and `PROGRESS.md` (task board).
+Build contracts exactly to `docs/CONTRACTS_SPEC.md`. Check `docs/DECISIONS.md` before changing a design choice.
+Hard rules: SmartOSM.peek() never returns has=false or 0 after init; repayments are never blocked; never change Spotter.mat; ilk is "paxg"; never modify Multipli core contracts.
+After finishing a task, tick it in `PROGRESS.md` and add a session-log line.
