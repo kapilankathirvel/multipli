@@ -28,6 +28,10 @@
 - [ ] When `research/RESULTS.md` exists, fill `review.md` §R4.3 with the measured numbers and show the mentor.
 - [ ] Optional: send the mentor `review.md` §R1–R3 now for early feedback (the definitions are final; only the measurements are pending).
 
+### Integration heads-up (added Sep 19, K5)
+- [ ] Tell **Varun**: `script/Deploy.s.sol` + `script/Spell.s.sol` now exist and are tested on anvil, so his `demo-up` script can call them for real (exact commands in the header comments of each script). `deployments/fork.json` is written by Deploy (gitignored).
+- [ ] Tell **Jeffrey**: he can switch to live mode any time. Run anvil + Deploy + Spell (or Varun's demo-up); MockSources are controlled by anvil account #0.
+
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
 - [ ] (added Sep 19, design) Who pokes the OSM/Spotter in production, and how often?

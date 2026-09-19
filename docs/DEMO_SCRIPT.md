@@ -50,5 +50,7 @@ Friday 21:00 UTC → closed → YELLOW (headroom = gap budget). Monday open with
 - S3 drain: **$312,319** minted vs **$43,724** collateral → **$268,595 bad debt** (10 PAXG, from `Baseline_S3`)
 - S1: legacy price age at mint **186 h** (Chainlink round), OSM still `has=true` at $4,372; 31,231 rwaUSD minted
 - S4: OSM served **$3,716** while the true price was **$4,372** → a 145% vault was liquidated
+- **OracleGuard (fork tests):** S3b $0 bad debt (max draw $31,231 < $43,724 collateral) · S1a YELLOW, new debt capped at $50k · S1b RED, repay works · S4 `Dog/liquidation-limit-hit` → 0 unfair liquidations
+- Live anvil after the spell: GREEN, score 100, `Vat.line` = $293,029 (debt $43,029 + $250k hourly budget)
 - Gas: `SmartOSM.poke` **≈247k** (incl. 4-source aggregation ≈105k + atomic Spotter.poke) vs legacy `≈40k` (≈$2–5 per hourly poke at normal gas; negligible vs the protected debt)
 - Demo mechanics: the fast mock sources have a 1h maxAge, so refresh them before every poke/after every warp

@@ -48,6 +48,7 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - [ ] `src/scenarios.ts` using viem **test actions** against anvil (`increaseTime`, `mine`, `snapshot`, `revert`, `impersonateAccount`) + `IMockSource.setPrice/setOk` + `smartOsm.poke()` + `controller.sync(ilk)`
 - [ ] Buttons: Reset (revert to `snapshotId`) · S1 stale feed (warp 25h, set mocks stale) · S2 market −8% (mocks −8%) · S3 compromised source (one mock ×10) · S4 captured wick (all −15% → poke → recover) · Poke · Sync · Warp +1h. Exact steps: `docs/DEMO_SCRIPT.md` §B
 - [ ] In mock mode the buttons drive the fake data, so you can build and style it all now
+- [ ] ⚠️ Live mode: the MockSources are owned by **anvil account #0** (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, the deployer), so send `setPrice/setOk` from that account. `poke()`/`sync()` are permissionless.
 - [ ] ⚠️ Live mode: **refresh the three mock sources (`setPrice`) before every `poke()` and after every time warp.** They have a 1h max age; if they go stale the poke is skipped (found while testing K3). "Warp +1h" should = warp → setPrice(current market) → poke → sync
 - **Commit:** `feat(dashboard): scenario controls`
 

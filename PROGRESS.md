@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K5 `Deploy.s.sol` + `Spell.s.sol` (writes `deployments/fork.json`), then K6 OracleGuard fork tests. Mentor review plan: `review.md`.
+**Next action:** kapilan.md K6b incident replay (mentor review R2), then K7 integration checkpoint. Mentor review plan: `review.md`.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -32,8 +32,8 @@
 ## Phase 3: Controller + spell + fixes (hours 14–20) · A
 - ✅ M6 `LineExecutor`, `HoleExecutor` (K1; verified on the real Vat/Dog) · K
 - ✅ M6 `RiskController` + tests (K4; review.md §R3 state table incl. rate limit) · K
-- ⬜ M7 `Deploy.s.sol`, `Spell.s.sol` (+ rollback test) · 1h
-- ⬜ M8 `OracleGuard_S1..S4` fork tests · 2h
+- ✅ M7 `Deploy.s.sol`, `Spell.s.sol`, `DeployLib.sol` (+ rollback; smoke-tested on anvil) · K
+- ✅ M8 `OracleGuard_S1..S4` fork tests (8 tests; every baseline exploit neutralised) · K
 
 ## Phase 4: Demo plumbing + UI (hours 4–26) · B (starts on ABI stubs at hour 4)
 - ⬜ M9 `scripts/demo-up.sh`: anvil fork + deploy + spell → `deployments/fork.json` · 1.5h
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K5+K6 done:** DeployLib/Deploy/Spell (smoke-tested on anvil), OracleGuard.t.sol (8): all baseline attacks neutralised on real rwaUSD; 91/91 green | K6b replay |
 | Sep 19 | Claude | **K4 done:** RiskController (15 tests): rate-limited GREEN, anchored YELLOW, RED=debt, guard with expiry+latch, spam-proof hysteresis | K5 Deploy/Spell |
 | Sep 19 | Claude | **K3 done:** SmartOSM drop-in (21 tests); real Spotter/Clipper work unchanged; 68/68 suite green. Note: fast sources must be refreshed before every poke (1h maxAge) | K4 RiskController |
 | Sep 19 | Claude | **K2.1 done:** weight-based Wq; all review.md parity vectors pass in Solidity (100/85/71/75/0) | K3 SmartOSM |

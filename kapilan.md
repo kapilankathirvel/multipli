@@ -56,11 +56,11 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(controller): GREEN/YELLOW/RED risk controller + liquidation guard`
 
 ### K5. `Deploy.s.sol` + `Spell.s.sol` (≈1h) · §7
-- [ ] Deploy everything, write `deployments/fork.json` (frozen schema); spell as the Safe; rollback
+- [x] `script/DeployLib.sol` (shared by scripts AND tests), `Deploy.s.sol` (writes `deployments/fork.json`, frozen schema), `Spell.s.sol` (run as Safe; `--sig "rollback()"`). **Smoke-tested on a live anvil fork:** pip → SmartOSM, GREEN, score 100, line = debt + $250k. ✅ Sep 19
 - **Commit:** `feat(scripts): Deploy and Spell scripts (Safe-impersonated install + rollback)`
 
 ### K6. `OracleGuard.t.sol` fork tests (≈2h), the proof
-- [ ] S1a/S1b, S2, S3, S4 + repay-always + rollback (mirror `Baseline.t.sol`)
+- [x] `test/fork/OracleGuard.t.sol` (8): S1a YELLOW (mint capped at $50k), S1b RED (mint reverts, **repay works**, price never 0), S2 RED with liquidations on, S3a legacy feed swap has no effect, S3b compromised source → **$0 bad debt** (vs $268,595), S4 guard blocks unfair liquidation then releases, install + rollback. ✅ Sep 19
 - **Commit:** `test(fork): OracleGuard neutralises S1-S4 on real rwaUSD`
 
 ### K6b. Mentor review R2: incident replay on the real contracts (≈1.5h)
