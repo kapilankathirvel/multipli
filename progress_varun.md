@@ -1,6 +1,6 @@
 # Varun's Progress — OracleGuard V4 Validation Study
 
-## Status: V4 COMPLETE (on synthetic data) — run fetch_data.py for real data
+## Status: V4 COMPLETE + V1 COMPLETE — V3 (demo scripts) next
 
 ---
 
