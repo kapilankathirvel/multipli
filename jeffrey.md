@@ -5,8 +5,8 @@
 > Tick boxes here as you go.
 
 ## Setup (≈15 min)
-- [ ] `git clone https://github.com/kapilankathirvel/multipli.git && cd multipli`
-- [ ] Node 20 + `npm i -g pnpm`. (Foundry is only needed for the final live demo; see varun.md Setup)
+- [x] `git clone https://github.com/kapilankathirvel/multipli.git && cd multipli`
+- [x] Node 20 + `npm i -g pnpm`. (Foundry is only needed for the final live demo; see varun.md Setup) — running Node 22.19 / npm 10.17; `dashboard/node_modules` installed
 
 ## Ownership (only you edit these)
 ```
@@ -22,9 +22,11 @@ dashboard/**      docs/PITCH.md      deck/**
 
 ## Tasks (in order, no external dependencies)
 
-### J1. Scaffold + mock mode (≈1h)
-- [ ] `pnpm create vite dashboard --template react-ts`; add `viem recharts` + Tailwind
-- [ ] `src/data.ts`: one interface, two implementations: `mock` (animated fake data, scenario-scriptable) and `live` (viem `createPublicClient`, polling every 2s). Switch with `VITE_MODE=mock|live`
+### J1. Scaffold + mock mode (≈1h) — ✅ done
+- [x] `pnpm create vite dashboard --template react-ts`; add `viem recharts` + Tailwind
+- [x] `src/data.ts`: one interface, two implementations: `mock` (animated fake data, scenario-scriptable) and `live` (viem `createPublicClient`, polling every 2s). Switch with `VITE_MODE=mock|live`
+- [x] `src/protocol.ts`: the score formula + state machine in TS (mirrors `OracleGuardAggregator.sol` and `review.md` §R1.2/§R3). The mock **derives** score/state/line/guard from simulated feeds instead of hard-coding them, so every panel stays self-consistent and J3's buttons only have to move feeds.
+- [x] `scripts/parity.mjs` + `pnpm check:parity`: reproduces all 5 `review.md` §R1.4 parity vectors (V-a…V-e) — proof the UI formula equals the contract's.
 - **Commit:** `feat(dashboard): scaffold with mock/live data layer`
 
 UI data shapes:
@@ -36,12 +38,12 @@ type Risk     = { state: "GREEN"|"YELLOW"|"RED"; guard: boolean; lineUsd: number
 type Legacy   = { price: number; valid: boolean; ageHours: number };
 ```
 
-### J2. Panels (≈3h)
-- [ ] Sources table (fresh/stale + inlier/outlier pills) · Confidence gauge 0–100 with GREEN/YELLOW/RED bands + lo–mid–hi band
-- [ ] Big state badge + 🛡️ liquidation-guard flag · Vat panel (debt vs line headroom; "new borrowing: open / limited / frozen")
-- [ ] Event log (decoded events)
-- [ ] **Mentor review R1:** a "contribution" column in the sources table = weight share (from `aggregator.sourceAt(i)` weights) and a ✓/✗ for whether it currently counts toward confidence; show the score as `Wq × Wd × Wf` (compute the three factors in the UI from `observations()` with the formula in `review.md` §R1.2)
-- [ ] **Mentor review R3:** a "What this state changes" panel that renders the `review.md` §R3 table row for the current state (borrow ✅/⚠️/❌, repay ✅, liquidations ✅/⏸️, line and hole values)
+### J2. Panels (≈3h) — ✅ done
+- [x] Sources table (fresh/stale + inlier/outlier pills) · Confidence gauge 0–100 with GREEN/YELLOW/RED bands + lo–mid–hi band
+- [x] Big state badge + 🛡️ liquidation-guard flag (+ the trigger that put us in this state) · Vat panel (debt vs line headroom; "new borrowing: open / limited / frozen")
+- [x] Event log (decoded events)
+- [x] **Mentor review R1:** a "contribution" column in the sources table = weight share (live: from `aggregator.sourceCount()/sourceAt(i)`; mock: 2/2/2/1 per §R1.1) with a ✓/✗ for whether it currently counts toward confidence; the score is rendered as `⌊100 · Wq · Wd · Wf⌋` with the three factors computed in the UI (`src/protocol.ts:factorsOf`) plus a bar + one-line explanation each
+- [x] **Mentor review R3:** `components/StateEffects.tsx` — "What this state changes" renders the `review.md` §R3 row for the current state (borrow ✅/⚠️/❌, repay ✅, liquidations ✅/⏸️, `Vat.line`, `Dog.hole`, "`Spotter.mat` never touched")
 - **Commit:** `feat(dashboard): Oracle War Room panels`
 
 ### J3. Scenario controls (≈1.5h), your own code, no keeper needed
@@ -69,3 +71,25 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - **Commit:** `docs: demo video link`
 
 ## Budget ≈9h (incl. mentor review items).
+
+---
+
+## Progress log (newest first)
+
+### Sep 19 — J1 + J2 complete, verified
+**Built / changed** (all inside `dashboard/`):
+| File | What |
+|---|---|
+| `src/protocol.ts` | **new** — TS mirror of `OracleGuardAggregator.sol` (weighted median → MAD outliers → `Wq/Wd/Wf` → score) + the `review.md` §R3 controller rules (`deriveState`, `lineFor`, `effectsFor`). Single source of truth for the mock world *and* the UI factor breakdown. |
+| `src/data.ts` | mock rewritten as a **simulation**: scenarios only move feeds (price / freshness / liveness), everything else is derived. `poke` mirrors `SmartOSM.poke` (quorum → jump quarantine → `cur ← nxt`), `sync` mirrors the controller. Live provider now reads `sourceCount()/sourceAt(i)` for weights + maxAge, names sources from `fork.json`, and uses **chain time** (not wall time) for ages. |
+| `src/components/SourcesTable.tsx` | R1 contribution column: weight-share bar + % + ✓/✗ counted; per-feed `w2 · maxAge 25h` sub-label; header shows "3/4 counted · 71.4% of weight". |
+| `src/components/ConfidenceGauge.tsx` | R1 `⌊100 · Wq · Wd · Wf⌋` line with live numbers + three factor bars (quorum / agreement / freshness) with explanations. |
+| `src/components/StateEffects.tsx` | **new** — R3 "What this state changes" panel (borrow, repay, deposit, withdraw, new liquidations, running auctions, `Vat.line`, `Spotter.mat`) + the trigger sentence. |
+| `src/components/StateBadge.tsx` | shows the trigger that produced the current state. |
+| `src/index.css` | styles for the three new blocks. |
+| `scripts/parity.mjs`, `package.json` | `pnpm check:parity` — the 5 `review.md` §R1.4 vectors. |
+| `README.md` | full test instructions for J1/J2 (mock) + live mode. |
+
+**Verified:** `pnpm check:parity` → 5/5 vectors (V-a 100, V-b 85, V-c 71, V-d 75, V-e 0) · `tsc -b` clean · `pnpm build` clean · scenario smoke run through the mock provider: idle GREEN 97–100 · S1 all-stale → no quorum → score 0 → RED + OSM STALE (legacy still "valid" at 41.5h) · S2 −8% with a lagging Chainlink → outlier, `Wq` 0.71, RED via `live.lo < OSM−1.5%` · S3 Chainlink ×10 → excluded, score 70 YELLOW while **legacy shows $43,727** · S4 wick captured (`cur` $3,716, live $4,372) → 🛡️ guard ON.
+
+**Next:** J3 scenario controls (buttons already have `applyScript('reset'|'s1'…'warp1h')` wired into the mock; live mode needs the viem test actions).

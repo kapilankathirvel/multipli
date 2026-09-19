@@ -28,6 +28,12 @@
 - [ ] When `research/RESULTS.md` exists, fill `review.md` §R4.3 with the measured numbers and show the mentor.
 - [ ] Optional: send the mentor `review.md` §R1–R3 now for early feedback (the definitions are final; only the measurements are pending).
 
+### Dashboard (Jeffrey, added Sep 19 — J1/J2)
+- [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1. Drive the scenarios from DevTools: `og('s1')`, `og('s2')`, `og('s3')`, `og('s4')`, `og('reset')`.
+- [ ] Commit J1+J2 when happy — `dashboard/` is still **untracked** in git (`git add -A`, see `docs/GIT_WORKFLOW.md`). Note `dashboard/dist/` is gitignored.
+- [ ] (Kapilan) The dashboard's live mode assumes `deployments/fork.json` gains a `oracleguard.sources` map whose **keys** name the feeds (`chainlink`, `pyth`, `redstone`, `dexTwap`, or `mockA/B/C`) — as in `fork.example.json`. If the real deploy uses different keys, tell Jeffrey (otherwise the table falls back to slot order).
+- [ ] (Kapilan/Varun) The R3 controller numbers shown in the UI (lineCap $1,000,000 · greenGap $250,000/h · yellowGap $50,000 · ε 1.5% · ε_guard 3% · hole $400,000 · guard 6h) are hard-coded in `dashboard/src/protocol.ts`. If K4 ships different values, ping Jeffrey to update them (or expose them as controller views).
+
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
 - [ ] (added Sep 19, design) Who pokes the OSM/Spotter in production, and how often?

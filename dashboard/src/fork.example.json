@@ -1,0 +1,33 @@
+{
+  "_comment": "Bundled copy of deployments/fork.example.json. Live mode prefers public/fork.json if present.",
+  "rpc": "http://127.0.0.1:8545",
+  "chainId": 31337,
+  "forkBlock": 26011000,
+  "ilk": "paxg",
+  "snapshotId": "0x0",
+  "oracleguard": {
+    "aggregator": "0x0000000000000000000000000000000000000001",
+    "smartOsm": "0x0000000000000000000000000000000000000002",
+    "controller": "0x0000000000000000000000000000000000000003",
+    "lineExecutor": "0x0000000000000000000000000000000000000004",
+    "holeExecutor": "0x0000000000000000000000000000000000000005",
+    "calendar": "0x0000000000000000000000000000000000000006",
+    "sources": {
+      "chainlink": "0x0000000000000000000000000000000000000007",
+      "pyth": "0x0000000000000000000000000000000000000008",
+      "redstone": "0x0000000000000000000000000000000000000009",
+      "dexTwap": "0x000000000000000000000000000000000000000a"
+    }
+  },
+  "maker": {
+    "vat": "0xbC22e8C15bC476EF4FD0124c5A03b23607e30D2C",
+    "spotter": "0xf3aee748355bb07CBe702B4ff8dBE6118b34e2A2",
+    "dog": "0x15a36d5cAf263160c2a49DDE6429C045Fb711dDD",
+    "legacyOsm": "0x89fbAe0302b8790D55fa36E6Ab09ac93F865993a",
+    "adapter": "0x82F5790Bd1c96790E4c3a3ebC8142bD4D6F8b1CD",
+    "chainlinkPaxgUsd": "0x9944D86CEB9160aF5C5feB251FD671923323f8C3",
+    "paxg": "0x45804880De22913dAFE09f4980848ECE6EcbAf78",
+    "paxgJoin": "0x3c9567C3b9c20E72858cD5714209EA7D7a8011fD"
+  },
+  "adminSafe": "0x194Ebc1B9B382ef0E6998cAAcE59aF843cf53b99"
+}
