@@ -1,6 +1,6 @@
 # Varun's Progress — OracleGuard V4 Validation Study
 
-## Status: V4 COMPLETE + V1 COMPLETE — V3 (demo scripts) next
+## Status: V4 COMPLETE + V1 COMPLETE + V3 COMPLETE — V2 (PythSource) optional next
 
 ---
 
@@ -64,12 +64,21 @@
 - [x] **V4 Metrics:** FP/FN definitions, threshold sweep, risk reduction §R4.3
 - [x] **V4 Output:** `run_study.py` generates `RESULTS.md` + charts in `research/out/`
 
+### V1 SessionCalendar
+- [x] **V1 Contract:** `contracts/src/SessionCalendar.sol` created
+- [x] **V1 Tests:** `contracts/test/unit/SessionCalendar.t.sol` (28/28 passing)
+
+### V3 Demo Scripts
+- [x] **V3 Scripts:** `scripts/demo-up.ps1`, `scripts/demo-up.sh`, `scripts/demo-down.ps1`, `scripts/demo-down.sh` created
+- [x] **V3 Validation:** Full self-test passing (anvil fork, deploy, spell, snapshot)
+
 ## Pending
 - [ ] Run `python research/fetch_data.py` to pull real Chainlink/yfinance data
       (requires ETH_RPC_URL set in environment or `contracts/.env`)
 - [ ] Run `python research/run_study.py` to generate final RESULTS.md + charts
-- [ ] V1 `SessionCalendar` contract (next after V4 data runs)
-- [ ] V3 demo bring-up scripts
+- [x] V1 `SessionCalendar` contract (tested and complete)
+- [x] V3 demo bring-up scripts (tested and complete)
+- [ ] V2 `PythSource` contract (optional)
 
 ## Data status
 - `research/data/` — empty until `fetch_data.py` is run
