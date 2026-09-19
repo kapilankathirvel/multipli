@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K3 `SmartOSM`, then K4 RiskController (with the rate-limited GREEN headroom from review.md §R3). Mentor review plan: `review.md`.
+**Next action:** kapilan.md K4 `RiskController` (with the rate-limited GREEN headroom from review.md §R3), then K5 Deploy/Spell. Mentor review plan: `review.md`.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -27,7 +27,7 @@
 
 ## Phase 2: Core OracleGuard (hours 6–14) · A
 - ✅ M4 `OracleGuardAggregator` + unit + fuzz + fork (K2) · K
-- ⬜ M5 `SmartOSM` + tests (ABI compat with Spotter, stale, quarantine, void disabled) · 4h
+- ✅ M5 `SmartOSM` + tests (K3; drop-in verified on the real Spotter/Vat/Dog/Clipper) · K
 
 ## Phase 3: Controller + spell + fixes (hours 14–20) · A
 - ✅ M6 `LineExecutor`, `HoleExecutor` (K1; verified on the real Vat/Dog) · K
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K3 done:** SmartOSM drop-in (21 tests); real Spotter/Clipper work unchanged; 68/68 suite green. Note: fast sources must be refreshed before every poke (1h maxAge) | K4 RiskController |
 | Sep 19 | Claude | **K2.1 done:** weight-based Wq; all review.md parity vectors pass in Solidity (100/85/71/75/0) | K3 SmartOSM |
 | Sep 19 | Claude | **Mentor review #1** captured in `review.md` (score definition, historical validation FP/FN, state effects, risk reduction); tasks added: K2.1, K4 rate limit, K6b replay (K), V4 validation study now top priority (V), contribution/state panels + 3 slides (J) | K2.1 |
 | Sep 19 | Claude | **K2 done:** Aggregator (median/MAD/score), 21 tests; demo starts at score 100; 40/40 suite green | K3 SmartOSM |

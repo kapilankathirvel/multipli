@@ -44,8 +44,8 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(aggregator): weight-based confidence (mentor review R1)`
 
 ### K3. `SmartOSM` (≈4h) · §3
-- [ ] Maker OSM ABI + `init`, freshness, quarantine, atomic Spotter poke, `void()` disabled, `price()/status()/age()/lastReading()`
-- [ ] Tests incl. Spotter/Clipper working with it as pip on the fork
+- [x] Maker OSM ABI + `init`, freshness, quarantine (re-confirm on a later hop), atomic Spotter poke, `void()` disabled, `price()/status()/age()/lastReading()`, `file()` for staleLimit/jumpLimitBps/jumpMinScore
+- [x] `test/unit/SmartOSM.t.sol` (16 incl. fuzz "peek always valid, Spotter never sees 0") + `test/fork/SmartOSM.fork.t.sol` (5): **real Spotter/Vat/Dog/Clipper run on SmartOSM unchanged**; swap has no price jump; Vat spot updates atomically; all-stale → Vat spot stays > 0 and status STALE; a real −15% crash still liquidates via the real Clipper. `poke()` ≈247k gas (incl. aggregator + Spotter.poke). ✅ Sep 19
 - **Commit:** `feat(osm): SmartOSM drop-in with freshness, quarantine, zero-price invariant`
 
 ### K4. `RiskController` (≈2.5h) · §6
