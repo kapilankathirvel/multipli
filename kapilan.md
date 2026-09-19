@@ -49,9 +49,10 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(osm): SmartOSM drop-in with freshness, quarantine, zero-price invariant`
 
 ### K4. `RiskController` (≈2.5h) · §6
-- [ ] GREEN/YELLOW/RED, spaced hysteresis, line via executor, guard via executor
-- [ ] **Mentor review R3/R4:** GREEN line = `min(debt + greenGap, lineCap)`, refilled at most once per `refillInterval` (1h), i.e. a **rate limit** so `MaxLoss ≤ greenGap × hours` even for undetected correlated failures. Exact state table: `review.md` §R3
-- [ ] **Calendar is optional:** if `calendar == address(0)` treat the market as always open. That removes any dependency on Varun's SessionCalendar
+- [x] GREEN/YELLOW/RED, spaced hysteresis (one level per kUp syncs ≥ upgradeInterval apart), line via executor, guard via executor
+- [x] **Mentor review R3/R4:** GREEN rate-limited headroom (`debt + greenGap`, refill ≤ 1/h); YELLOW anchored on entry and never raised; RED `line = debt`; guard `hole = 0` with 6h expiry + latch
+- [x] Calendar optional (`sessionAsset = 0` or no calendar = always open; a reverting calendar → YELLOW)
+- [x] `test/unit/RiskController.t.sol` (15): rate limit, cap, YELLOW leak-bound, market closed, RED (stale / market below OSM / quarantine), repay lowers line, spam-proof upgrades, guard on/release/expiry+latch, no guard on a real crash, auth. ✅ Sep 19
 - **Commit:** `feat(controller): GREEN/YELLOW/RED risk controller + liquidation guard`
 
 ### K5. `Deploy.s.sol` + `Spell.s.sol` (≈1h) · §7

@@ -9,7 +9,7 @@ It contains **four asks**. Each gets a precise answer, a deliverable, an owner, 
 |---|---|---|---|---|
 | R1 | Define the score + each oracle's contribution | §R1 below + weight-based `Wq` in the contract (K2.1) + contribution column in the UI | Kapilan (contract), Jeffrey (UI) | 🟨 contract ✅ (parity vectors pass), UI pending |
 | R2 | Test against real historical failures incl. correlated ones; report FP/FN | Python validation study (Varun V4) + Solidity incident replay on the real contracts (Kapilan K6b) → `research/RESULTS.md` | Varun, Kapilan | ⬜ |
-| R3 | Specify exactly what GREEN/YELLOW/RED changes | §R3 below (parameter-level table) + UI panel | Kapilan (spec+contract), Jeffrey (UI) | ✅ spec written here |
+| R3 | Specify exactly what GREEN/YELLOW/RED changes | §R3 below (parameter-level table) + UI panel | Kapilan (spec+contract), Jeffrey (UI) | 🟨 spec ✅ + contract ✅ (`RiskController`, 15 tests), UI pending |
 | R4 | Quantify the risk reduction | §R4: deterministic bounds now, measured numbers from R2 | Varun (numbers), Jeffrey (slide) | 🟨 bounds done, measurement pending |
 
 ---
