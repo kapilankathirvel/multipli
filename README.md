@@ -4,20 +4,6 @@
 
 OracleGuard is an oracle safety layer for **rwaUSD**, Multipli's Maker-fork CDP stablecoin backed by tokenised gold (**PAXG**). It replaces a single-feed, binary oracle with one that reports **a price *and* how sure it is (0–100)**, then tightens **new borrowing** step by step as that confidence falls. Repayments always work, and the price is never zero.
 
-**It is built and attacked on the real protocol, not a mock-up.** Every test runs on an **Ethereum mainnet fork** (block 26,011,000) against Multipli's deployed `Vat`, `Spotter`, `Dog`, `Clipper` and OSM. We first prove the exploits succeed on today's contracts. Then we install OracleGuard with **one governance spell** (no core code changed, one-call rollback) and prove the same exploits fail.
-
-| | Legacy rwaUSD (measured on the fork) | With OracleGuard |
-|---|---|---|
-| Feed compromised (price ×10) | **$268,595 bad debt** ($312,319 minted against $43,724 of gold) | **$0**: the bad source is rejected as an outlier |
-| Feed stale for 186 hours | still mints 31,231 rwaUSD on an 8-day-old price | 🟡 capped at $50k → 🔴 no new debt; **repay still works** |
-| Brief −15% dip captured by the 1h delay | healthy 145% vault liquidated | 🛡️ guard pauses *new* liquidations; **0 unjust liquidations** |
-| Worst-case new debt at a wrong price | **≈ $956,970 in one transaction** | **≤ $250,000 per hour** (rate-limited) |
-| 8 historical oracle incidents replayed hour by hour | 21 over-borrowing hours · 5 unfair-liquidation hours | **2** · **1** |
-
-The two remaining over-borrowing hours are **Mango Markets**, where every oracle followed a manipulated market. No consensus-based oracle can detect that case, including Chainlink's own network. We say so up front, and **bound** the damage instead ([Limitations](#limitations)).
-
----
-
 ## Table of contents
 
 1. [Problem statement](#problem-statement)
@@ -269,15 +255,6 @@ flowchart TB
 ```
 </details>
 
-### One price, end to end (real fork numbers)
-| Stage | What happens | Value |
-|---|---|---|
-| Sources | Chainlink $4,372.5 (18h old, OK under 25h), Pyth $4,372.0, RedStone $4,373.0, DEX $4,371.0 | all fresh |
-| Aggregator | weighted median → m0 $4,372.5; MAD 0.5, threshold 3 × max(0.5, 0.1% × m0) = $13.12 → 4 inliers | mid **$4,372.5**, score **98** |
-| SmartOSM | hour passed, not a suspicious rise → accept; `Spotter.poke()` in the same tx | spot = 4,372.5 / 1.40 = **$3,123.2** per PAXG |
-| RiskController | score ≥ 80, OSM LIVE, live.lo not below cur − 1.5% | 🟢 GREEN, `line` = $43,029 + $250,000 |
-| User | 10 PAXG deposited | may borrow up to **$31,231**; can always repay |
-
 ## The confidence score
 
 Implemented in [`OracleGuardAggregator.sol`](contracts/src/OracleGuardAggregator.sol):
@@ -296,21 +273,6 @@ score = ⌊100 · Wq · Wd · Wf⌋
 ok = (#inliers ≥ 2), otherwise score = 0
 ```
 
-**How much each oracle counts** (weights 2/2/2/1 = 28.6% / 28.6% / 28.6% / 14.3%):
-
-| Lost (stale / broken / outlier) | Wq | Score (others agree) | State |
-|---|---|---|---|
-| none | 7/7 | 100 | 🟢 |
-| DEX only | 6/7 | 85 | 🟢 (a thin-pool glitch shouldn't restrict users) |
-| any one of Chainlink / Pyth / RedStone | 5/7 | 71 | 🟡 |
-| one major + DEX | 4/7 | 57 | 🟡 |
-| two majors | 3/7 | 42 | 🔴 |
-| fewer than 2 left | n/a | 0 | 🔴 |
-
-**Moving the price itself** needs ≥ ½ of the weight: **two of the three major networks lying in the same direction.** No single source, and no flash loan, can do it.
-
-> **Dashboard note.** The dashboard currently computes an experimental *additive* score (`50·Wq + 30·Wd + 20·Wf − volatility penalty`, RED < 40) on real mainnet inputs. The deployed contract uses the multiplicative formula above. `pnpm check:parity` in `dashboard/` prints both for the reference vectors.
-
 ## What GREEN / YELLOW / RED actually change
 
 Only two protocol parameters are ever touched: **`Vat.ilks[paxg].line`** (debt ceiling) and **`Dog.ilks[paxg].hole`** (liquidation room).
@@ -326,34 +288,6 @@ Only two protocol parameters are ever touched: **`Vat.ilks[paxg].line`** (debt c
 
 Downgrades are instant. Upgrades move one level per 3 healthy syncs spaced ≥ 10 minutes apart ([ADR-006](docs/DECISIONS.md)). RED pins `line` to current debt rather than 0 ([ADR-007](docs/DECISIONS.md)); the Vat only checks the ceiling when debt *increases*, which is why repayment always works.
 
-## Latency and manipulation: real-world solutions
-
-✅ built and tested · 🟨 partly built · 🗺️ designed (roadmap)
-
-**Latency**
-| Solution | Status | Effect |
-|---|---|---|
-| Atomic `SmartOSM.poke()` → `Spotter.poke()` | ✅ | one step instead of two unpaid ones; the Vat updates the moment the OSM does |
-| Split clocks: live band for borrowing, delayed price for liquidations | ✅ | market drops below the Vat's price → new borrowing frozen **immediately** |
-| Pull oracles (Pyth, RedStone): fresh signed price posted in the same tx | 🟨 real `PythSource` built; RedStone mocked | latency from hours to seconds; no dependence on a push schedule |
-| Fail-safe when keepers stop | ✅ | no poke → age grows → STALE → RED: missing keepers make it *more* careful |
-| Paid keepers (Chainlink Automation / Gelato, bounty from stability fees) | 🗺️ | `poke`/`sync` are permissionless, so any backup keeper can step in |
-| Low-latency feeds (Chainlink Data Streams etc.) as extra `IPriceSource`s | 🗺️ | no other contract changes: the interface is frozen |
-| L2 sequencer-uptime check (Base / Ink / Monad) | 🗺️ | sequencer down → treated as stale → RED |
-
-**Manipulation**
-| Solution | Status | Defeats |
-|---|---|---|
-| Adapter sanity checks + Chainlink clamp detection + Pyth confidence cap | ✅ | garbage values, LUNA-style "stuck at floor" feeds |
-| Weight by manipulation cost (DEX 1/7) + weighted median | ✅ | flash loans, any single corrupted oracle |
-| MAD outlier rejection | ✅ | extreme values, which are excluded **and** lower the score (visible) |
-| Asymmetric jump quarantine + 1-hour delay | ✅ | one-block pumps, poke-timing on a rising price |
-| Hysteresis on upgrades | ✅ | `sync()` spam |
-| $250k/h rate limit | ✅ | bounds everything that slips through: `MaxLoss ≤ rate × time undetected` |
-| Real 30-min TWAP + liquidity floor | 🗺️ | a 12s, +50% pump moves a 30-min TWAP by only ≈ 0.3% |
-| Round-TWAP poke · verifiable challenge window | 🗺️ | no single block worth timing; anyone can void a pending price with signed evidence |
-| 48h timelock + tighten-only guardian on oracle config | 🗺️ recommended to Multipli | instant oracle swaps by a compromised Safe (V5) |
-| Fundamental anchor (XAU × troy-oz ratio) + Proof-of-Reserve | 🗺️ | correlated manipulation of *every* PAXG feed |
 
 ## Code map
 
@@ -542,17 +476,6 @@ Unfair-liquidation hours: **5 → 1**. Guard false alarms during real crashes: *
 
 Prepared answers to judge questions: [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
 
-## Roadmap
-
-- Real RedStone adapter and Uniswap v3 TWAP with a liquidity floor
-- Round-TWAP poke and a verifiable challenge window (Pyth VAA / EIP-712 evidence)
-- Fundamental anchor (XAU × troy-oz ratio) and Proof-of-Reserve-gated minting
-- Paid keeper network (Chainlink Automation / Gelato) funded from stability fees
-- 48h timelock + tighten-only guardian on oracle configuration
-- Multi-asset: tokenised equities (TSLAx) with SessionCalendar, T-bills with NAV attestations
-- Cross-chain: health status broadcast via CCIP to rwaUSD on Base / Ink / Monad, with sequencer-uptime checks
-- A native v2 Vat with separate borrow and liquidation prices
-
 ## Documentation
 
 | Doc | Contents |
@@ -570,13 +493,3 @@ Prepared answers to judge questions: [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md
 | [`research/RESULTS.md`](research/RESULTS.md) | validation study results |
 | [`dashboard/DASHBOARD.md`](dashboard/DASHBOARD.md) | every dashboard panel and button |
 | branch [`docs/reference`](https://github.com/kapilankathirvel/multipli/tree/docs/reference/reference) | beginner explainers: `START_HERE`, `FLOW_EXPLAINED`, `FLOW_EXPLAIN_2`, `SOLUTION_EXPLAINED`, `IMPLEMENTATION_EXPLAINED`, `PROBLEMS_AND_SOLUTIONS`, `RUNNING`, mentor `review.md` |
-
-## Team
-
-| Member | Owns |
-|---|---|
-| **Kapilan** | on-chain product: sources, executors, Aggregator, SmartOSM, RiskController, deploy/spell, fork tests, invariants, incident replay |
-| **R Varun** | SessionCalendar, PythSource, demo-up scripts, validation study (`research/`) |
-| **Jeffrey Winson** | Oracle War Room dashboard, pitch deck, demo video |
-
-Built in 30 hours for the Multipli Hackathon 2026. Everything runs on a local mainnet fork; nothing touches the live protocol.
