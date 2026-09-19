@@ -24,6 +24,10 @@
 - [ ] Ask **Varun** to push SessionCalendar / PythSource / demo-up when ready. Wiring them is just `CALENDAR=… PYTH_SOURCE=…` on Deploy (no code change).
 - [ ] Tell **Jeffrey**: the integration checkpoint passed, so he can go live now (J6 note in `jeffrey.md`).
 
+### Running the project (added Sep 19)
+- [ ] Follow `RUNNING.md`: Part A (tests), Part B (live demo + your own cast scenarios), Part C (dashboard).
+- [ ] Tell **Varun**: add `--slow` to the forge calls in `scripts/demo-up.ps1/.sh` (note added in `varun.md`).
+
 ### Pitch / deck accuracy
 - [ ] (added Sep 19, docs review) Find a citable source for "Oracle attacks caused 13% of DeFi exploits in 2025", or soften it to "oracle manipulation is consistently among the top DeFi exploit classes". → `docs/PITCH.md`
 - [ ] (added Sep 19, docs review) Drop "first system built specifically for RWA oracles". Use "first graduated-trust oracle layer that drops into rwaUSD's deployed Maker-fork contracts without core changes." → `docs/PITCH.md`

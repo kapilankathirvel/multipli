@@ -4,6 +4,8 @@ pragma solidity 0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {Constants as C} from "../src/Constants.sol";
 import {DeployLib} from "./DeployLib.sol";
+import {SessionCalendar} from "../src/SessionCalendar.sol";
+import {PythSource} from "../src/sources/PythSource.sol";
 
 /// @notice Step 1 of the demo: deploy OracleGuard on the anvil mainnet fork and write deployments/fork.json.
 ///
@@ -25,6 +27,24 @@ contract Deploy is Script {
         address pythSource = vm.envOr("PYTH_SOURCE", address(0)); // Varun's real PythSource
 
         vm.startBroadcast();
+
+        if (calendar == address(0)) {
+            SessionCalendar cal = new SessionCalendar();
+            cal.setWeekMask(C.ILK, cal.nyseMask());
+            calendar = address(cal);
+            console2.log("Deployed SessionCalendar:", calendar);
+        }
+
+        if (pythSource == address(0)) {
+            pythSource = address(new PythSource(
+                0x4305FB666EE7FeA854E05F87c2b6107386d4B3C5,
+                0x273717b49430906f4b0c230e99aa1007f83758e3199edbc887c0d06c3e332494,
+                150,
+                "Pyth PAXG/USD"
+            ));
+            console2.log("Deployed PythSource:", pythSource);
+        }
+
         d = DeployLib.deploy(legacyPrice);
         DeployLib.wireExtras(d, calendar, pythSource);
         vm.stopBroadcast();

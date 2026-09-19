@@ -1,379 +1,477 @@
-# OracleGuard: the complete flow, end to end
+# How data flows through OracleGuard (simple, complete, step by step)
 
-> One document, one running example. We follow **a single gold price** from the moment four oracles report it, through aggregation, the confidence score, the delayed price, the risk decision, and all the way to what a borrower or a liquidator can do on the real rwaUSD contracts.
-> Background (what rwaUSD / a vault / Maker words mean): `SOLUTION_EXPLAINED.md` Part 1. Code details: `IMPLEMENTATION_EXPLAINED.md`.
-
----
-
-## 0. The big picture on one page
-
-```
- ┌──────────────── LAYER 1: SOURCES ────────────────┐
- │ Chainlink PAXG/USD (real)   Pyth (sim)            │   each one answers: "price, when, ok?"
- │ RedStone (sim)              DEX TWAP (sim)        │
- └───────────────┬───────────────────────────────────┘
-                 │ observe()  ×4
-                 ▼
- ┌──────────── LAYER 2a: AGGREGATOR ─────────────────┐
- │ drop stale/broken → weighted median → drop         │   answers: "the price is X,
- │ outliers → band lo..hi → score 0-100               │   and I'm S% confident"
- └───────┬───────────────────────────────┬───────────┘
-         │ read()  (once per hour)       │ read()  (every sync)
-         ▼                               ▼
- ┌──── LAYER 2b: SMART OSM ────┐   ┌──── LAYER 2c: RISK CONTROLLER ──────────┐
- │ 1-hour delayed price         │──►│ compares LIVE price vs DELAYED price,   │
- │ cur (in use) / nxt (next)    │   │ score, staleness → GREEN/YELLOW/RED     │
- │ never 0, holds back          │   │ + liquidation guard                     │
- │ suspicious rises             │   └───────┬──────────────────────┬─────────┘
- └──────────┬──────────────────┘           │ setLine              │ setHole
-            │ peek() (via Spotter.poke)    ▼                      ▼
-            ▼                         LineExecutor           HoleExecutor
- ┌──────────── LAYER 3: MULTIPLI CORE (unchanged) ─────────────────────────────┐
- │ Spotter → Vat.spot (price ÷ 1.4)    Vat.line (debt ceiling)   Dog.hole (liq. limit)│
- │ Vat: borrow / repay / deposit       Dog + Clipper: liquidations                 │
- └─────────────────────────────────────────────────────────────────────────────────┘
-                 ▲                                   ▲
-            borrowers                          liquidators (keepers)
-```
-**Three questions drive everything:**
-1. *What is the price?* (Aggregator)
-2. *What price should the protocol act on right now?* (SmartOSM: the safe, 1-hour-delayed one)
-3. *How much should we trust it, and what may users do?* (RiskController)
+> This file follows **the gold price** from the moment it enters our system to the moment it decides what a borrower or a liquidator is allowed to do. It covers **every path** the data can take: normal days, bad days, user actions, admin actions, and the dashboard.
+> Written in plain language. Where a technical name matters (because you'll hear it in a review), it's explained the first time it appears.
 
 ---
 
-## 1. Before OracleGuard: the legacy flow (for contrast)
-```
-Chainlink ──► PriceFeedAdapter ──► OSM (1h delay) ──► Spotter ──► Vat.spot
-               (0,false) if >24h     ignores "false"!
-```
-One feed, no confidence, no reaction logic. If the feed dies, the OSM keeps using the last price as **valid forever**. The only emergency button sets the price to 0, which liquidates everyone. OracleGuard replaces the middle of this chain and adds a reaction layer next to it.
+## Part 0: The basics you need first (5 minutes)
 
----
+### What is rwaUSD, in one picture?
+Think of **a bank that gives loans against gold**:
+- You **deposit gold** (a digital version called **PAXG**: 1 token = 1 ounce of real gold, ≈ **$4,372**).
+- You **borrow dollars** (called **rwaUSD**) against it.
+- The bank lets you borrow at most **$1 for every $1.40 of gold**. So with 10 PAXG ($43,724) you can borrow up to **$31,231**.
+- If gold falls so much that you no longer have $1.40 per $1 borrowed, anyone can **sell your gold to repay your loan**, plus a 5% penalty. This is called **liquidation**.
 
-## 2. Setup: what happens once (deploy + spell)
+### Why the gold price is everything
+The bank is a computer program running on a blockchain (Ethereum). **It cannot look up the gold price by itself.** Someone has to tell it. That "someone" is called an **oracle** (think: a messenger).
+- If the messenger says gold is worth **more** than it really is → people borrow too much → the bank **loses money** ("bad debt").
+- If the messenger says gold is worth **less** than it really is → honest people's gold gets **sold unfairly**.
 
-**Step A: Deploy** (`script/Deploy.s.sol` → `DeployLib.deploy`), any account:
-1. Create the 4 sources:
-   - `ChainlinkSource` wraps the real feed `0x9944…F8C3`;
-   - 3 `MockSource`s (Pyth, RedStone, DEX) are primed to Chainlink's price, **$4,372.478**.
-2. Create the `OracleGuardAggregator` and register the sources with **weights 2/2/2/1** and max ages **25h / 1h / 1h / 1h**.
-3. Create `SmartOSM`, then `init($4,372.478)`. That's the legacy OSM's current price, read from its storage slot 3, so there's **no price jump** at the switch. Whitelist the Spotter, Clipper and End as readers.
-4. Create `LineExecutor` (cap = today's ceiling, $1,000,000) and `HoleExecutor` (cap = today's liquidation limit, $400,000).
-5. Create the `RiskController` and give it the PAXG config: GREEN ≥ 80, RED < 50, greenGap $250k/h, yellowGap $50k, ε 1.5%, guard ε 3%, guard max 6h, and so on.
-6. Give the Admin Safe admin rights on everything; write `deployments/fork.json` (addresses for the dashboard).
-7. *(Optional, K7)* `CALENDAR=` / `PYTH_SOURCE=` plug in Varun's market-hours calendar and real Pyth adapter.
+### The words you'll see in this file (only these)
+| Word | Simple meaning |
+|---|---|
+| **Oracle / source** | A messenger that reports a price. We use four. |
+| **PAXG** | Digital gold (1 token = 1 ounce). |
+| **rwaUSD** | The digital dollar you borrow. |
+| **Vault** | Your personal account at the bank: your gold + your loan. |
+| **Liquidation** | Selling someone's gold because their loan became too risky. |
+| **Borrowing limit ("debt ceiling")** | The maximum total the bank lets everyone borrow against gold. |
+| **Keeper** | A helper bot that presses the "update" buttons. Anyone can be one. |
+| **Contract** | A program on the blockchain. Each part of our system is one contract. |
 
-**Step B: Spell** (`script/Spell.s.sol` → `DeployLib.spell`), executed **as the Admin Safe**, the only account allowed to change Multipli's core:
-1. `Spotter.file("paxg","pip", SmartOSM)`: the Spotter now reads prices from SmartOSM instead of the legacy OSM.
-2. `Vat.rely(LineExecutor)`: the executor may now change the PAXG debt ceiling (only within its cap).
-3. `Dog.rely(HoleExecutor)`: the executor may now change the PAXG liquidation limit (only within its cap).
-4. `Spotter.poke("paxg")` and `RiskController.sync("paxg")`: first price push and first health check.
-
-**Result:** 🟢 GREEN, score 100, `Vat.line` = debt $43,029 + $250,000 = **$293,029**. Nothing else in Multipli changed. Rollback = point the pip back at the legacy OSM and revoke the two executors.
-
----
-
-## 3. The recurring cycle: what happens every hour
-```
- keeper (anyone) ──► SmartOSM.poke() ──► Aggregator.read() ──► 4 × Source.observe()
-                          │
-                          ├─► (maybe) shift cur ← nxt, nxt ← new price
-                          └─► Spotter.poke() ──► Vat.spot updated
- keeper (anyone) ──► RiskController.sync() ──► Aggregator.read() + SmartOSM.status/price
-                          ├─► LineExecutor.setLine() ──► Vat.line
-                          └─► HoleExecutor.setHole() ──► Dog.hole
- users / liquidators ──► Vat.frob (borrow/repay) · Dog.bark (liquidate)   ← unchanged Maker code
-```
-Both `poke` and `sync` are **permissionless** (anyone can call them). In production a keeper bot does it (Chainlink Automation / Gelato); in the demo, our scripts or dashboard do. Now each stage in depth.
-
----
-
-## 4. Stage 1: Sources: "what does each oracle say?"
-Every source implements one function, `observe()`, returning an **Observation**:
-```
-{ price (USD per token, 18 decimals), conf, updatedAt (timestamp), ok (true/false) }
-```
-**Rule: a source never reverts.** Whatever goes wrong becomes `ok = false`, so one broken oracle can't crash the whole system.
-
-### ChainlinkSource (the real one)
-Chainlink answers `latestRoundData()` → `answer = 437247814339` with **8 decimals**.
-- Convert to 18 decimals: 437247814339 × 10¹⁸ / 10⁸ = **4,372.47814339 × 10¹⁸** ($4,372.478).
-- `ok = false` if:
-  - the answer ≤ 0,
-  - the timestamp is 0 or in the future,
-  - the value is absurdly large (overflow guard),
-  - or **it sits exactly on Chainlink's min/max circuit-breaker bound**. That's the LUNA-2022 failure mode, where the feed kept printing its floor while the real price collapsed.
-- It does **not** judge staleness (the Aggregator does), so the dashboard can still show "Chainlink: $4,372, 18h old".
-
-### MockSource (Pyth / RedStone / DEX stand-ins)
-Holds a price someone sets with `setPrice(p)` (stamps "now", ok = true). In production these would be real adapters behind the **same interface**. Varun's real `PythSource` plugs in via `PYTH_SOURCE=`.
-
----
-
-## 5. Stage 2: the Aggregator: "one price + how confident?"
-`OracleGuardAggregator.read()` turns the 4 Observations into a **Reading**:
-```
-{ mid (the price), lo, hi (agreeing band), score 0-100, nFresh, nInliers, freshestAge, ok }
-```
-
-### Running example A: a normal hour
-| Source | Price | Age | Weight | maxAge |
-|---|---|---|---|---|
-| Chainlink | $4,372.5 | 18h | 2 | 25h |
-| Pyth | $4,372.0 | 1 min | 2 | 1h |
-| RedStone | $4,373.0 | 1 min | 2 | 1h |
-| DEX TWAP | $4,371.0 | 1 min | 1 | 1h |
-
-**Step 1: freshness.** A source counts only if `ok` and age ≤ its maxAge. Chainlink is 18h old but its maxAge is 25h (it's a slow "update-on-move" feed), so ✅. All 4 are fresh.
-
-**Step 2: sort by price and take the weighted median `m0`:**
-```
-DEX 4,371.0 (w1) → cumulative 1
-Pyth 4,372.0 (w2) → cumulative 3
-CL  4,372.5 (w2) → cumulative 5   ← first time cumulative ≥ half of total weight (7/2 = 3.5)
-RS  4,373.0 (w2) → cumulative 7
-m0 = $4,372.5
-```
-Why weighted *median*: the middle can't be dragged by one extreme value, and weights mean the more trustworthy sources count more.
-
-**Step 3: throw out outliers (MAD test).**
-- Deviations from m0: DEX 1.5, Pyth 0.5, CL 0, RS 0.5 → sorted [0, 0.5, 0.5, 1.5] → **MAD** (median of deviations) = 0.5.
-- Floor: 0.1% of m0 = $4.37. The floor stops "everyone agrees perfectly" (MAD = 0) from flagging tiny differences.
-- Threshold = 3 × max(0.5, 4.37) = **$13.12** → all 4 are within it → all **inliers**.
-
-**Step 4: the band.** mid = weighted median of inliers = **$4,372.5**; lo = $4,371.0; hi = $4,373.0.
-
-**Step 5: the confidence score** = 100 × Wq × Wd × Wf:
-| Factor | Meaning | Calculation | Value |
-|---|---|---|---|
-| **Wq** coverage | share of total weight that is healthy and agreeing | 7/7 | 1.00 |
-| **Wd** agreement | 1 − spread/2%, spread = (hi − lo)/mid | spread = 2/4,372.5 = 0.046% → 1 − 0.046/2 | 0.98 |
-| **Wf** freshness | 1 while the *freshest* inlier is ≤ half its maxAge old, then linear to 0 | freshest is 1 min old (≤ 30 min) | 1.00 |
-| **score** | | 100 × 1 × 0.98 × 1 | **98** |
-
-`ok = true` because ≥ 2 inliers.
-
-### Running example B: the DEX gets manipulated to 10× ($43,720)
-- Sorted: Pyth 4,372.0 (cum 2) → CL 4,372.5 (cum 4 ≥ 3.5) → **m0 = $4,372.5**. The attacker's value is at the far end and can't reach the middle.
-- Deviations [0, 0.5, 0.5, 39,347.5] → MAD 0.5 → threshold $13.12 → **DEX is an outlier**.
-- mid **$4,372.5 (unchanged)**, Wq = 6/7 = 0.857, Wd ≈ 0.99 → **score 84 → still GREEN**. A thin-pool glitch shouldn't restrict users.
-
-### How much each oracle "counts"
-| Lost (stale / broken / outlier) | Wq | Score (others agree) |
+### The main parts (the "cast of characters")
+| Our part | Everyday comparison | Its job |
 |---|---|---|
-| nothing | 7/7 | 100 |
-| DEX only | 6/7 | ~85 → GREEN |
-| any one of Chainlink / Pyth / RedStone | 5/7 | ~71 → YELLOW |
-| one major + DEX | 4/7 | ~57 → YELLOW |
-| two majors | 3/7 | ~42 → RED |
-| fewer than 2 left | n/a | 0, ok = false → RED |
+| **4 Sources** (Chainlink, Pyth, RedStone, DEX) | four messengers | Each reports the gold price and how fresh it is |
+| **Aggregator** | a judge | Listens to all four, throws out liars and old news, decides one price, and says how confident it is (0–100) |
+| **SmartOSM** | a noticeboard updated once an hour | Holds the price the bank *acts on*, always one hour behind, so tricks have time to be noticed |
+| **Spotter** *(rwaUSD's own part)* | a clerk | Copies the noticeboard price into the bank's ledger |
+| **Vat** *(rwaUSD's own part)* | the ledger / the bank itself | Records every vault and enforces the lending rules |
+| **RiskController** | a traffic light | Decides 🟢 / 🟡 / 🔴 and whether to raise the 🛡️ shield |
+| **LineExecutor / HoleExecutor** | two small hands | The only parts allowed to touch the bank: one changes the borrowing limit, the other can pause liquidations |
+| **Dog + Clipper** *(rwaUSD's own)* | the repo man + the auction house | Start liquidations and sell the gold |
 
-**Moving the price itself** takes ≥ half the weight (3.5 of 7), i.e. **two of the three major oracles lying in the same direction**. No single source can do it.
+**Important:** the parts marked *(rwaUSD's own)* already existed. **We did not change their code.** We only changed *where they get their price from*, and gave our two small hands permission to adjust two numbers.
 
 ---
 
-## 6. Stage 3: SmartOSM: "which price does the protocol act on now?"
-The protocol does **not** use the live price directly. Like Maker's OSM, SmartOSM keeps two slots:
-- **`cur`**: the price the Vat uses **right now**,
-- **`nxt`**: the price that becomes `cur` **one hour from now**.
+## Part 1: The whole journey on one page
 
-**Why the delay?** If someone manipulates prices, there's an hour before it affects liquidations: time for the system (and humans) to react.
-
-### `poke()`: once per hour (`hop` = 3600s)
 ```
-1. Has an hour passed since the last update?            no  → revert "OSM/not-passed"
-2. Ask the Aggregator → Reading r
-3. r.ok == false (no quorum / everything stale)?        yes → emit PokeSkipped, STOP.
-      cur & nxt unchanged (the price is NEVER set to 0), age keeps growing → status STALE.
-      The hour is not consumed: anyone can retry the moment sources recover.
-4. Is r a big RISE (> 5% above nxt) with low confidence (score < 80),
-   and nothing already held back?                       yes → QUARANTINE:
-      cur ← nxt (the already-checked price still moves on), pending ← r.mid, STOP.
-      A later hour that still shows the rise confirms it.
-5. Otherwise ACCEPT:  cur ← nxt,  nxt ← r.mid,  lastGoodAt ← now
-6. Call Spotter.poke() → the Vat's price updates in the same transaction
+  [1] PRICE ENTERS           [2] JUDGE DECIDES         [3] NOTICEBOARD            [4] BANK LEDGER
+  4 messengers report  ───►  Aggregator: one price ──► SmartOSM: price the  ───►  Spotter copies it
+  gold price + time          + confidence 0-100        bank acts on (1h late)     into the Vat
+                                     │                         │
+                                     │  (live price + score)   │ (the 1h-late price + its health)
+                                     ▼                         ▼
+                              [5] TRAFFIC LIGHT: RiskController compares "live" vs "1h late"
+                                     │                         │
+                          hand #1: borrowing limit     hand #2: pause liquidations
+                                     ▼                         ▼
+                              [6] THE BANK (Vat / Dog) applies its normal rules
+                                     │
+                     borrowers borrow / repay        liquidators sell risky gold
 ```
-**Why only rises are held back (ADR-011):**
-- A *wrongly high* collateral price lets people **borrow too much**, so rises need confirmation.
-- A *drop* must pass fast, so **liquidations happen in time** during a real crash.
-- A wrongly *low* price is handled by the guard (Stage 4).
-- Our historical replay showed that holding back drops froze the price for 4 hours during Black Thursday, so we changed it.
+Two buttons make the data move (anyone can press them, usually a keeper bot):
+- **`poke()`**: "update the noticeboard" (at most once per hour). Moves data through steps 1 → 2 → 3 → 4.
+- **`sync()`**: "update the traffic light" (any time). Moves data through steps 1 → 2 → 5 → 6.
 
-### Timeline example (price moves from $4,372 to $4,460)
-| Time | Live mid | After `poke()`: `cur` (Vat uses) | `nxt` |
+The rest of this file walks through each step, then every other path.
+
+---
+
+## Part 2: Before anything runs: setup (happens once)
+
+### 2a. Building our parts ("Deploy")
+Someone runs the deploy script. It creates our parts, in this order:
+1. **The four messengers.**
+   - The Chainlink messenger is connected to the **real** Chainlink gold feed.
+   - The other three (Pyth, RedStone, DEX) are **simulated** in our demo, so we can stage attacks. They start at the same price Chainlink reports: **$4,372.478**.
+2. **The judge (Aggregator).** It is told about the four messengers and how much to trust each:
+   | Messenger | Trust (weight) | Too old after |
+   |---|---|---|
+   | Chainlink | 2 | 25 hours (it only updates when the price moves, so being quiet for hours is normal) |
+   | Pyth | 2 | 1 hour |
+   | RedStone | 2 | 1 hour |
+   | DEX (an exchange price) | 1 (easiest to manipulate) | 1 hour |
+3. **The noticeboard (SmartOSM).** It is given a starting price equal to what rwaUSD's old noticeboard currently shows ($4,372.478), so **nothing jumps** at switch-over. It's told who may read it: the Spotter, the Clipper (auction house) and the End (emergency shutdown).
+4. **The two hands.**
+   - Hand #1 may set the borrowing limit, but never above **$1,000,000** (today's value).
+   - Hand #2 may set the liquidation limit, but never above **$400,000** (today's value).
+5. **The traffic light (RiskController)**, with its rules: GREEN at 80+, RED under 50, $250k/hour, $50k, and so on.
+6. rwaUSD's admins also get admin rights over all our parts. The addresses are saved to a file (`deployments/fork.json`) so the dashboard can find everything.
+
+*(Optional: Varun's market-hours calendar and a real Pyth connection can be plugged in at this step with two settings, `CALENDAR` and `PYTH_SOURCE`.)*
+
+### 2b. Switching the bank over ("the Spell")
+rwaUSD's admins (a group wallet that needs 4 of 8 signatures) approve **one transaction** that:
+1. tells the **Spotter** (clerk): "from now on, read the price from **SmartOSM**, not the old OSM";
+2. gives **hand #1** permission to change the borrowing limit, and **hand #2** permission to change the liquidation limit;
+3. presses both buttons once, so everything starts fresh.
+
+**Result:** 🟢 GREEN, confidence 100, borrowing limit = today's loans ($43,029) + $250,000 = **$293,029**.
+**Undo:** one transaction points the clerk back to the old OSM and takes the hands' permissions away.
+
+---
+
+## Part 3: Step [1]: the price enters (the four messengers)
+
+### How each messenger gets its price
+| Messenger | Where its price really comes from | In our demo |
+|---|---|---|
+| **Chainlink** | a network of independent companies agrees on the price and writes it to the blockchain themselves, when the price moves enough or about once a day | **real** (the actual live feed, frozen at our test block) |
+| **Pyth** | price publishers (trading firms) sign prices; anyone can bring the latest one on-chain | simulated |
+| **RedStone** | similar to Pyth: signed price packages brought on-chain when needed | simulated |
+| **DEX TWAP** | the average price on an on-chain exchange over the last ~30 minutes | simulated |
+
+In the demo, the simulated messengers are **updated by us** (the keeper script or the dashboard buttons call `setPrice`). In real life their own networks would update them.
+
+### What every messenger hands to the judge
+Every messenger answers the same question, "what's your price?", with a small **report card**:
+```
+price      how much 1 PAXG is worth, in dollars
+updatedAt  when this price was published
+ok         is this report usable at all? (yes / no)
+```
+
+### Cleaning the Chainlink report (the only real one)
+Chainlink sends `437247814339`, which means **$4,372.47814339** (Chainlink uses 8 decimal places). Our Chainlink messenger:
+- converts it to the format the rest of the system uses (18 decimal places);
+- marks it **not ok** if the price is zero or negative, the time is missing or in the future, the number is absurdly large, or **the price is stuck at Chainlink's built-in floor or ceiling**. That last one is how the LUNA crash fooled others in 2022: the feed kept reporting its minimum while the real price kept falling.
+- It does **not** decide whether the price is too old. That's the judge's job, so the dashboard can still show "Chainlink: $4,372, 18 hours old".
+
+**Golden rule:** a messenger **never crashes the system**. If anything goes wrong, it just says `ok = no`.
+
+---
+
+## Part 4: Step [2]: the judge decides (the Aggregator)
+When asked, the judge collects the four report cards and produces **one answer**:
+```
+mid        the price it believes
+lo / hi    the lowest and highest price among the messengers it believes
+score      how confident it is, 0 to 100
+ok         did enough messengers agree to give an answer at all?
+```
+
+### The judge's 5 steps, with a real example
+The four reports on a normal hour:
+| Messenger | Price | Age | Weight |
+|---|---|---|---|
+| Chainlink | $4,372.5 | 18 hours | 2 |
+| Pyth | $4,372.0 | 1 minute | 2 |
+| RedStone | $4,373.0 | 1 minute | 2 |
+| DEX | $4,371.0 | 1 minute | 1 |
+
+**Step 1: ignore old or broken reports.** Each report must be `ok` and younger than its "too old after" limit. Chainlink is 18h old but its limit is 25h, so it's fine. All 4 pass.
+
+**Step 2: find the weighted middle price.**
+- Line the prices up from low to high and count the weights as you go:
+  ```
+  DEX       $4,371.0   weight 1   → running total 1
+  Pyth      $4,372.0   weight 2   → running total 3
+  Chainlink $4,372.5   weight 2   → running total 5   ← first to pass half of 7 (3.5)
+  RedStone  $4,373.0   weight 2   → running total 7
+  ```
+- The middle price is **$4,372.5**.
+- *Why the middle and not the average?* An average can be dragged by one crazy number; the middle can't.
+
+**Step 3: throw out liars.**
+- Measure how far each messenger is from the middle: DEX 1.5, Pyth 0.5, Chainlink 0, RedStone 0.5.
+- The "typical distance" is the middle of those distances = 0.5.
+- Anyone more than **3 × the typical distance** away is a liar. The distance used is never less than 0.1% of the price, so tiny disagreements don't count. Here that means $13.12.
+- Everyone is within $13.12, so nobody is thrown out.
+
+**Step 4: the final price and the range.**
+- The final price = the middle of the believed messengers = **$4,372.5**.
+- Lowest believed = $4,371.0; highest believed = $4,373.0.
+
+**Step 5: the confidence score**, from three questions, each worth up to 1.0:
+| Question | Rule | Here |
+|---|---|---|
+| **How much of the trust is still working and agreeing?** | believed weight ÷ total weight (7) | 7/7 = **1.0** |
+| **How closely do they agree?** | 1.0 if identical, falling to 0 when the spread reaches 2% | spread 0.05% → **0.98** |
+| **How recent is the newest price?** | 1.0 if the newest believed price is less than half its "too old" limit, then falls to 0 | newest is 1 min old → **1.0** |
+| **Score** | 100 × the three multiplied | 100 × 1 × 0.98 × 1 = **98** |
+
+`ok` = yes, because at least 2 messengers were believed.
+
+### What happens when a messenger lies (DEX says $43,720, 10× the real price)
+- The line-up becomes Pyth $4,372.0 → Chainlink $4,372.5 → RedStone $4,373.0 → DEX $43,720.
+- The running total passes 3.5 at Chainlink, so the middle is still **$4,372.5**. The lie sits at the far end and can't reach the middle.
+- DEX is ~$39,000 from the middle, far more than $13.12, so **thrown out**.
+- Trust still working: 6/7 → **score 84 → still GREEN**. One lying exchange isn't worth restricting users over.
+
+### How much each messenger "counts" (memorise this table)
+| Messengers not believed (old / broken / lying) | Trust left | Score if the rest agree | Light |
+|---|---|---|---|
+| none | 7/7 | 100 | 🟢 |
+| DEX only | 6/7 | ~85 | 🟢 |
+| one of Chainlink / Pyth / RedStone | 5/7 | ~71 | 🟡 |
+| one big one + DEX | 4/7 | ~57 | 🟡 |
+| two big ones | 3/7 | ~42 | 🔴 |
+| only one (or none) left | n/a | 0, and "not ok" | 🔴 |
+
+**To actually change the price, at least 2 of the 3 big messengers must lie in the same direction.** No single messenger can do it.
+
+---
+
+## Part 5: Step [3]: the noticeboard (SmartOSM), when someone presses `poke()`
+
+### The idea: a noticeboard that is always 1 hour behind
+The bank doesn't act on the live price directly. It acts on a price posted on a noticeboard with **two slots**:
+- **"Now" slot (`cur`)**: the price the bank uses right now.
+- **"Next" slot (`nxt`)**: the price that moves into "Now" at the next update, one hour later.
+
+**Why be one hour behind?** If someone fakes a price, it only reaches the bank an hour later, which leaves time to notice and react. rwaUSD's old noticeboard (the OSM) worked the same way; we kept that part because it's useful.
+
+### What happens when someone presses `poke()`: all possible paths
+```
+Has an hour passed since the last update?
+ ├─ NO  → refused ("OSM/not-passed"). Nothing changes.
+ └─ YES → ask the judge for its answer
+          │
+          ├─ PATH A: the judge says "not ok" (too few messengers believed, e.g. all silent)
+          │     → skip. Both slots stay as they are. The price is NEVER set to zero.
+          │       The board notes "no good update since …" → after 2 hours it reports STALE.
+          │       The hour is not used up: anyone can press poke again as soon as messengers recover.
+          │
+          ├─ PATH B: the new price is a big RISE (more than 5% above "Next")
+          │          AND the judge isn't confident (score below 80)
+          │          AND nothing is already being held back
+          │     → HOLD IT BACK ("quarantine"): it is NOT put in "Next".
+          │       The already-checked "Next" price still moves into "Now" (so the board keeps moving).
+          │       Board status = QUARANTINED. If an hour later the rise is still there, it's accepted.
+          │
+          └─ PATH C: everything else (normal moves, drops of any size, rises everyone agrees on)
+                → ACCEPT: "Now" ← old "Next",  "Next" ← new price
+                  + immediately tell the clerk (Spotter) to copy "Now" into the bank's ledger
+```
+
+### Why only RISES get held back (and never drops)
+- A fake **high** price is what lets people **borrow too much**, so a suspicious rise must be double-checked.
+- A **drop** must go through fast, so that during a real crash the bank can **sell risky gold in time**.
+- A fake **low** price is handled by the traffic light's 🛡️ shield instead (Part 7).
+- *We learned this from our own testing:* when we replayed the 2020 "Black Thursday" crash, the old rule held back every hour of the crash and the bank kept the pre-crash price for 4 hours. We changed the rule, and it now follows a crash with only the normal 1-hour delay.
+
+### The noticeboard over three hours (example)
+| Time | Live price (judge) | "Now" slot, the bank uses | "Next" slot |
 |---|---|---|---|
 | 10:00 | $4,372 | $4,372 | $4,372 |
-| 11:00 | $4,460 (+2%, full agreement) | $4,372 | **$4,460** |
+| 11:00 | $4,460 (+2%, all agree) | $4,372 | **$4,460** |
 | 12:00 | $4,460 | **$4,460** | $4,460 |
-The Vat sees a new price **one hour after** the market. That's the built-in delay.
+The bank starts using the new price **one hour** after the market moved.
 
-### The Spotter → Vat step (Multipli's own code, unchanged)
-```
-Spotter.poke("paxg"):  (val, has) = SmartOSM.peek()          // (4,372.478, true), never (0, false)
-                       spot = val / par / mat = 4,372.478 / 1 / 1.40 = 3,123.198
-                       Vat.file("paxg", "spot", 3,123.198)
-```
-`spot` is the **borrowing power per PAXG**: 1 PAXG lets you owe at most $3,123.
-
-### SmartOSM `status()`
+### The board's status (the traffic light reads this)
 | Status | Meaning |
 |---|---|
-| LIVE | fresh, normal |
-| STALE | no accepted update for > 2h (sources dead) |
-| QUARANTINED | a suspicious rise is being held back |
-| STOPPED | the guardian paused it |
-| UNINIT | not initialised |
+| **LIVE** | updated recently, all normal |
+| **STALE** | no good update for over 2 hours (the messengers went quiet) |
+| **QUARANTINED** | a suspicious rise is being held back |
+| **STOPPED** | admins paused it |
+
+### Two promises the noticeboard always keeps
+1. **The price is never zero and never "invalid".** rwaUSD's old noticeboard had an emergency button that set the price to zero, which would have made *every* loan look unpaid at once. We removed that button.
+2. **It always knows how old its price is**, and says so openly (STALE) instead of pretending.
 
 ---
 
-## 7. Stage 4: RiskController: "how much do we trust it, and what's allowed?"
-`sync("paxg")` compares **two** views: the **live** Reading (Aggregator, right now) and the **delayed** price (SmartOSM `cur`, what the Vat is using). The gap between them tells us which way the risk points.
-
-### 7.1 Deciding the target state (checked top to bottom)
+## Part 6: Step [4]: the clerk copies the price into the bank (rwaUSD's own code)
+Right after an accepted update, the **Spotter** (clerk) reads the "Now" price and writes into the bank's ledger (the **Vat**) the **borrowing power per PAXG**:
 ```
-RED    if  !ok  or score < 50                      (no quorum / low confidence)
-       or  SmartOSM status ≠ LIVE                  (stale, quarantined, stopped)
-       or  live.lo < cur × (1 − 1.5%)              (market is clearly BELOW the price the Vat uses
-                                                     → borrowing at cur = over-borrowing)
-YELLOW if  score < 80  or  market closed (calendar)
-GREEN  otherwise
+borrowing power per PAXG = price ÷ 1.40 = $4,372.478 ÷ 1.40 = $3,123.198
 ```
-**Hysteresis:** getting worse is **instant**. Getting better moves **one level at a time**, after **3 healthy checks at least 10 minutes apart**. Spamming `sync()` can't flip it back to GREEN.
+The Vat calls this number **`spot`**. From now on, every loan check uses it. (The clerk can also be pressed on its own by anyone; it just copies whatever the noticeboard's "Now" slot says.)
 
-### 7.2 Applying the decision: lever 1, the debt ceiling (`Vat.line`, via LineExecutor)
-Current debt is $43,029.
-| State | Rule | Example value | Effect on users |
+---
+
+## Part 7: Step [5]: the traffic light (RiskController), when someone presses `sync()`
+
+### What it looks at
+The traffic light compares **two prices**:
+- **the live price** from the judge (what the market says *right now*), with its confidence score;
+- **the noticeboard's "Now" price** (what the bank is *actually using*, one hour behind), with its status.
+
+**The gap between these two tells us which way the danger points.**
+
+### How it picks the colour (checked top to bottom, first match wins)
+```
+🔴 RED     if the judge says "not ok", or the score is under 50
+           or the noticeboard is STALE / QUARANTINED / STOPPED
+           or the live price is more than 1.5% BELOW the bank's price
+              (the bank thinks gold is worth more than it really is → people could borrow too much)
+🟡 YELLOW  if the score is under 80, or the market is closed (e.g. a stock on a weekend)
+🟢 GREEN   otherwise
+```
+**Getting worse is instant; getting better is slow.** To move up one colour, the light needs **3 healthy checks at least 10 minutes apart**. So nobody can press `sync()` 100 times to force it back to green.
+
+### What each colour does: hand #1 sets the borrowing limit
+Today's total loans are $43,029.
+| Light | Borrowing limit | What borrowers can do |
+|---|---|---|
+| 🟢 **GREEN** | today's loans + **$250,000**, topped up at most **once per hour** | borrow up to $250,000 of new loans per hour (a **speed limit**, so even an undetected fake price can't be exploited all at once) |
+| 🟡 **YELLOW** | today's loans + **$50,000**, fixed when YELLOW starts and **never raised** while YELLOW | only $50,000 more in total until trust returns |
+| 🔴 **RED** | exactly today's loans | **no new borrowing at all** |
+| any colour | n/a | **paying back always works** |
+
+### The shield: hand #2 pauses liquidations
+```
+🛡️ SHIELD UP   if the judge is confident (score 80+)
+              AND the live price is more than 3% ABOVE the bank's price
+              (the bank thinks gold is worth LESS than it really is → honest people could lose their gold unfairly)
+   → new liquidations are paused (sales already running continue)
+🛡️ SHIELD DOWN when the gap closes, or after 6 hours at most (so liquidations can never be blocked forever)
+```
+
+### The two dangers and the two tools, side by side
+| If the bank's price is… | The danger is… | The tool used | What stays allowed |
 |---|---|---|---|
-| 🟢 GREEN | line = debt + $250k, refilled at most **once per hour** | $293,029 | borrow up to $250k of new debt per hour (**rate limit**: even an undetected bad price can't mint more than that per hour) |
-| 🟡 YELLOW | on entry: line = debt + $50k, **never raised while YELLOW** | $93,029 | only $50k more in total until trust recovers |
-| 🔴 RED | line = current debt | $43,029 | **no new borrowing at all**; repay lowers it further |
+| **too HIGH** | people borrow too much → bank loses money | 🟡/🔴: limit or stop **new borrowing** | paying back, liquidations |
+| **too LOW** | honest people's gold gets sold | 🛡️: pause **new liquidations** | paying back, borrowing (per colour) |
 
-### 7.3 Lever 2, the liquidation guard (`Dog.hole`, via HoleExecutor)
-```
-guard ON  if  ok  and  score ≥ 80  and  live.hi × (1 − 3%) > cur
-             ("everyone agrees the market is well ABOVE the price the Vat uses",
-              i.e. the delayed price is unfairly LOW, e.g. a captured dip)
-   → Dog.hole = 0  → no NEW liquidations (running auctions continue)
-guard OFF when the condition clears, or after 6 hours at most
-   → Dog.hole = $400,000 restored; after an expiry it can't re-arm until the condition clears once
-```
-
-### 7.4 The asymmetry, in one table
-| Danger | Which direction | Our lever | What stays open |
-|---|---|---|---|
-| over-borrowing | the price the Vat uses is too **high** | RED / YELLOW: cap or freeze **borrowing** | liquidations, repay, deposits |
-| unfair liquidation | the price the Vat uses is too **low** | guard: pause **new liquidations** | borrowing (per state), repay |
-
-**Never touched:** the price itself (no zeroing), `Spotter.mat` (140%), fees, repayments.
+**Never touched:** the price itself, the $1.40 rule, fees, paying back.
 
 ---
 
-## 8. Stage 5: the executors: bounded hands on the core
+## Part 8: Step [5b]: the two small hands
 ```
-RiskController ──setLine(ilk, x)──► LineExecutor ──require(x ≤ cap)──► Vat.file(ilk, "line", x)
-RiskController ──setHole(ilk, y)──► HoleExecutor ──require(y ≤ cap)──► Dog.file(ilk, "hole", y)
+Traffic light ──"set the limit to X"──►  Hand #1 ──(X ≤ $1,000,000? yes)──► the bank's borrowing limit = X
+Traffic light ──"set the pause to Y"──►  Hand #2 ──(Y ≤ $400,000?  yes)──► the bank's liquidation limit = Y  (0 = paused)
 ```
-- They're the **only** new contracts with rights on Multipli's core, and each can change **one number**, never above the governance cap.
-- Only the RiskController (and the Safe) can call them.
-- Even a buggy controller can at most *lower* the ceiling or pause liquidations, never mint, never move a price.
+- They're **the only parts of our system allowed to touch the bank**, and each can change **one number**, never above its maximum.
+- Only the traffic light (and rwaUSD's admins) can use them.
+- Even if the traffic light had a bug, the worst that could happen is "too careful". The hands can't create money or change prices.
 
 ---
 
-## 9. Stage 6: the final step: what users and liquidators experience
-All of this is **unchanged Maker code**; OracleGuard only changed the inputs (`spot`, `line`, `hole`).
+## Part 9: Step [6]: what happens at the bank (the final step)
+All of this is **rwaUSD's own, unchanged code**; we only changed its inputs (the price, the borrowing limit, the liquidation limit).
 
-### A borrower (`Vat.frob`)
-When you borrow (`dart > 0`), the Vat checks:
-```
-1. total debt after the borrow ≤ Vat.line          else "Vat/ceiling-exceeded"   ← RiskController's lever
-2. your collateral × spot ≥ your debt              else "Vat/not-safe"           ← SmartOSM's price
-```
-When you **repay** (`dart < 0`), check 1 is skipped entirely. That's why **repayment always works**, in every state.
+### Flow: a user deposits gold
+Gold goes into the bank through its gold "door" (the Join), then into the user's vault. **Always allowed**, in every colour.
 
-*Example:* 10 PAXG deposited → borrowing power 10 × 3,123 = $31,231.
-- GREEN: you can borrow up to $31,231, if the hourly budget has room.
-- RED: any borrow reverts `Vat/ceiling-exceeded`, but you can still repay.
+### Flow: a user borrows rwaUSD
+The bank checks two things:
+```
+1. Would total loans stay within the borrowing limit?   (set by our traffic light)
+      no → refused: "Vat/ceiling-exceeded"
+2. Does the user have enough gold? gold × $3,123 ≥ loan   (price from our noticeboard)
+      no → refused: "Vat/not-safe"
+```
+*Example:* 10 PAXG → can borrow up to $31,231.
+- 🟢 Allowed if this hour's budget has room.
+- 🟡 Allowed if the $50k YELLOW budget has room.
+- 🔴 Refused.
 
-### A liquidator (`Dog.bark` → Clipper auction)
+### Flow: a user pays back
+The bank **skips check 1 entirely** when a loan goes down. That's why paying back works in every colour, always. (We tested this 3,200 times with random actions.)
+
+### Flow: a user withdraws gold
+Allowed as long as the remaining gold still covers the loan at $3,123 per PAXG. Our system doesn't block it.
+
+### Flow: a liquidation (selling risky gold)
 ```
-1. vault unsafe:  collateral × spot < debt              else "Dog/not-unsafe"             ← SmartOSM's price
-2. room left:     Dog.hole > amount already in auction   else "Dog/liquidation-limit-hit"  ← guard lever
-3. Clipper starts a Dutch auction at (SmartOSM price × 1.10), reading the price through the Spotter/pip
+1. A liquidator (keeper) says: "this vault is under-covered, sell it" (Dog.bark)
+2. The bank checks: gold × $3,123 < loan?                  (price from our noticeboard)
+      no → refused: "Dog/not-unsafe"
+3. The bank checks: is there room in the liquidation limit? (set by our hand #2)
+      no (shield up, limit = 0) → refused: "Dog/liquidation-limit-hit"
+4. The auction house (Clipper) starts a falling-price auction. It starts at the noticeboard price × 1.10,
+   and buyers take the gold as the price drops.
 ```
-*Example:* a vault at 145% with a dip locked into `cur` looks unsafe, but the guard set hole = 0 → `Dog/liquidation-limit-hit` → the user keeps their gold. An hour later the price catches up and the vault is genuinely safe.
 
 ---
 
-## 10. A full day, told as one story (every component's values)
-Ceiling cap $1M, debt $43k, true gold price ≈ $4,372.
-| Time | What happens in the world | Aggregator | SmartOSM | RiskController | Users |
+## Part 10: A full day in the life (every part's values)
+| Time | What happens in the world | Judge (live price, score) | Noticeboard | Traffic light | Users |
 |---|---|---|---|---|---|
-| 09:00 | normal | mid $4,372, score 100 | LIVE, cur $4,372 | 🟢 GREEN, line $293k | borrow ≤ $250k/h |
-| 11:00 | Chainlink stops updating (26h old) | Chainlink stale → Wq 5/7 → **71** | LIVE (others still fresh) | 🟡 **YELLOW**, line debt + $50k | borrow ≤ $50k total |
-| 13:00 | attacker pushes Pyth to 10× too | Pyth outlier as well → only RedStone + DEX (3/7) → **42**, mid still ≈ $4,372 | cur unchanged | 🔴 **RED**, line = debt | borrowing frozen, repay OK |
-| 15:00 | every source goes silent | ok = false, score 0 | poke skipped → **STALE**, price kept (never 0) | 🔴 RED | frozen, repay OK, **no mass liquidation** |
-| 17:00 | sources return, all agree | score 100 | poke accepted → LIVE | still RED; needs 3 spaced healthy syncs | frozen |
-| 17:30 | 3 healthy syncs done | 100 | LIVE | 🟡 YELLOW | $50k |
-| 18:00 | 3 more | 100 | LIVE | 🟢 GREEN (refill) | $250k/h |
-| 20:00 | real crash −15%, all sources agree | score 100, mid $3,716 | drop passes immediately (no quarantine): nxt $3,716, cur $3,716 an hour later | live < cur → 🔴 RED until cur catches up | liquidations **run** on unsafe vaults |
-| 21:00 | a brief −15% dip was captured, but the market is back at $4,372 | score 100, mid $4,372 | cur = $3,716 (the dip) for one hour | live well above cur → 🛡️ **guard ON**, hole = 0 | healthy vaults **not** liquidated |
-| 22:00 | delayed price catches up | 100 | cur $4,372 | guard OFF, hole $400k | normal |
+| 09:00 | normal | $4,372, **100** | LIVE, $4,372 | 🟢 limit $293k | borrow ≤ $250k/h |
+| 11:00 | Chainlink stops updating (26h old) | Chainlink ignored → **71** | LIVE (others fresh) | 🟡 limit = loans + $50k | borrow ≤ $50k total |
+| 13:00 | someone also makes Pyth report 10× | Pyth thrown out too → **42**, price still $4,372 | unchanged | 🔴 limit = loans | no new loans, repay OK |
+| 15:00 | every messenger goes silent | "not ok", **0** | update skipped → **STALE**, price kept (never 0) | 🔴 | frozen, repay OK, **no mass liquidation** |
+| 17:00 | messengers come back and agree | **100** | accepted → LIVE | still 🔴 (needs 3 spaced healthy checks) | frozen |
+| 17:30 | 3 healthy checks done | 100 | LIVE | 🟡 | $50k |
+| 18:00 | 3 more | 100 | LIVE | 🟢 (limit topped up) | $250k/h |
 
-*(The 20:00 and 21:00 rows are two alternative events, a real crash vs a brief dip, to show both directions.)*
+Two alternative events, to show both directions:
+
+| Event | Judge | Noticeboard | Traffic light | Users |
+|---|---|---|---|---|
+| **A real crash, −15%, everyone agrees** | $3,716, score 100 | the drop is accepted at once (drops are never held back); the bank uses it an hour later | live price below the bank's → 🔴 until the board catches up | risky vaults **are** liquidated (correct) |
+| **A brief −15% dip got onto the board, but the market is back** | $4,372, score 100 | "Now" = $3,716 for one hour | live price well above the bank's → 🛡️ **shield up** | healthy vaults **not** liquidated; an hour later the board catches up and the shield drops |
 
 ---
 
-## 11. Off-chain pieces around the flow
-| Piece | Role | Talks to |
+## Part 11: Every other data path
+
+### 11a. Reading paths (nothing changes, just looking)
+| Who reads | What | Why |
 |---|---|---|
-| **Keeper** (production: Chainlink Automation / Gelato; demo: scripts/dashboard) | calls `poke()` hourly and `sync()` after it; in the demo also refreshes the simulated sources | SmartOSM, RiskController, MockSources |
-| **`deployments/fork.json`** | address book written by Deploy | read by the dashboard and the demo scripts |
-| **Dashboard** (Jeffrey) | polls every 2s: `aggregator.read()/observations()`, `smartOsm.price()/status()`, `controller.status()`, `vat.ilks()`; shows sources, score (Wq × Wd × Wf), state, what each state changes, events; scenario buttons | all of the above, read-only + mock setters |
-| **Validation study** (Varun, `research/`) | a Python copy of the formula for large-scale testing (Monte-Carlo, historical data) | offline |
+| Spotter, Clipper, End (whitelisted) | the noticeboard's "Now" price (`peek`) | to run the bank |
+| anyone (dashboard, you, judges) | judge's answer + each messenger's report (`read`, `observations`), noticeboard price/status/age, traffic-light status, bank limits | to watch the system |
+| dashboard | "event messages" the contracts shout when something happens: update accepted / skipped / held back, colour changed, shield up/down | the event log |
 
----
+### 11b. The dashboard's path (Jeffrey)
+Every 2 seconds it asks all our parts for their current values and draws the panels. Its scenario buttons write only into the demo: they change the simulated messengers' prices, move the local clock forward, and press `poke` / `sync`. It never changes the real rwaUSD rules.
 
-## 12. What if something breaks? (failure flows)
-| Failure | Where it's caught | What the flow does |
-|---|---|---|
-| one oracle reverts or returns garbage | Aggregator `try/catch`, price cap | ignored; score drops by its weight share |
-| one oracle lies (spike/crash) | Aggregator MAD filter | outlier; price unchanged; score −(weight share) |
-| one oracle goes stale | Aggregator freshness | excluded; YELLOW if it's a major one |
-| all oracles stale | SmartOSM skip + STALE | last price kept (never 0), RED, repay works |
-| Aggregator itself reverts | SmartOSM `try/catch` | `PokeSkipped(reason 2)`; ages → STALE → RED |
-| sudden low-agreement rise | SmartOSM quarantine | held back one hour; RED while held |
-| real crash, one oracle lagging | drop passes, Aggregator drops the laggard | the Vat follows the crash one hour later (design delay); RED on borrowing; liquidations run |
-| dip captured by the delayed price | RiskController guard | new liquidations paused ≤ 6h |
-| **2+ major oracles lie together** (Mango) | ❌ not detectable by consensus | bounded: ≤ $250k new debt per hour (rate limit), vs ≈$957k at once in legacy |
-| nobody calls poke/sync | ages → STALE on the next sync | fails safe (RED) |
-| Spotter.poke fails inside poke | `try/catch` | price still stored; anyone can call Spotter.poke |
-| controller bug | executor caps | worst case: a lower ceiling or paused liquidations, never minting or moving the price |
-| governance wants out | `Spell.rollback()` | back to the legacy OSM in one transaction |
-
----
-
-## 13. Who can call what (permissions)
-| Function | Who |
+### 11c. Admin paths (rwaUSD's admins only)
+| Action | Effect |
 |---|---|
-| `SmartOSM.poke`, `RiskController.sync`, `Spotter.poke` | **anyone** |
-| `SmartOSM.peek/read` | whitelisted readers only: Spotter, Clipper, End |
-| `SmartOSM.price/status/age`, `Aggregator.read`, `Controller.status` | anyone (views) |
-| `LineExecutor.setLine`, `HoleExecutor.setHole` | RiskController (+ Admin Safe) |
-| config (`addSource`, `setIlk`, `file`, `stop`, `change`) | Admin Safe / deployer (production: behind a timelock) |
-| `Spotter.file` (the pip swap), `Vat.rely`, `Dog.rely` | Admin Safe only (Multipli governance) |
-| `MockSource.setPrice` | deployer (demo only; real sources are updated by their networks) |
+| add/remove a messenger, change weights | changes the judge's inputs |
+| change the traffic-light rules (thresholds, $ budgets) | changes how colours are chosen |
+| stop / restart the noticeboard | freezes updates (status STOPPED → 🔴) |
+| plug in the market-hours calendar | closed market → 🟡 |
+| **rollback** | the clerk reads the old OSM again; the two hands lose their permissions |
+*(Recommendation for production: put a waiting period in front of these, so users get time to react.)*
+
+### 11d. Test and demo paths (not part of the real system)
+- **Our tests** run on a private **copy** of Ethereum, taken at a fixed moment. They can pretend to be rwaUSD's admins and move the clock, which is how we run the attacks.
+- The **simulated messengers** are how we stage "this source lies" or "this source is silent".
 
 ---
 
-## 14. The whole flow in 10 lines (memorise this)
-1. **Four oracles** report a price. Broken ones say "not ok" instead of crashing anything.
-2. The **Aggregator** drops stale ones, takes a **weighted median** (no single oracle can move it), and rejects **outliers**.
-3. It scores confidence **0–100 = coverage × agreement × freshness**.
-4. **SmartOSM** stores that price with a **1-hour delay** (`nxt` → `cur`), **never outputs 0**, and holds back suspicious **rises**.
-5. SmartOSM pushes `cur` to the **Spotter → Vat** (`spot = price ÷ 1.4`) in the same transaction.
-6. The **RiskController** compares **live vs delayed** price, score and staleness → **GREEN / YELLOW / RED** (+ guard).
-7. It acts only through **two bounded executors**: the **debt ceiling** (borrowing: $250k/h, $50k, $0) and the **liquidation limit** (the guard).
-8. **Borrowers:** the Vat checks ceiling + collateral. **Repay always works** (the ceiling isn't checked on repay).
-9. **Liquidators:** the Dog checks the vault is unsafe + there's room. The guard can pause **new** liquidations (≤ 6h) when the delayed price is unfairly low.
-10. Installed by **one governance spell**, with **no changes to Multipli's code**, and **one-call rollback**.
+## Part 12: When things break: every failure path
+| What breaks | Who notices | What happens next |
+|---|---|---|
+| one messenger crashes or talks nonsense | the judge (it never trusts a report blindly) | ignored; score drops by that messenger's share |
+| one messenger lies | the judge's liar test | thrown out; price unchanged; score drops |
+| one messenger goes quiet | the judge's age check | ignored; big one → 🟡 |
+| **all** messengers go quiet | the noticeboard (update skipped → STALE) | 🔴 no new loans; price kept (never 0); repay works |
+| the judge itself fails | the noticeboard (it never trusts the judge blindly either) | update skipped → eventually STALE → 🔴 |
+| a sudden suspicious rise | the noticeboard | held back an hour; 🔴 meanwhile |
+| a real crash while one messenger lags | the judge throws the laggard out; the drop passes | the bank follows the crash with the normal 1h delay; 🔴 on borrowing; liquidations run |
+| a dip got stuck on the board | the traffic light | 🛡️ pauses new liquidations, ≤ 6h |
+| **2+ big messengers lie together** (like Mango Markets, 2022) | ❌ nobody can tell; the majority agrees on the lie | **damage capped**: ≤ $250,000 of new loans per hour (the old system: ≈ $957,000 at once) |
+| nobody presses the buttons | the next check sees an old board | STALE → 🔴 (fails safe) |
+| the clerk fails to copy the price | the noticeboard ignores the error | the price is still stored; anyone can press the clerk again |
+| a bug in the traffic light | the hands' maximums | worst case: the limit is too low or liquidations pause; never new money, never a moved price |
+| admins want out | rollback transaction | back to the old system in one step |
+
+---
+
+## Part 13: Who is allowed to do what
+| Action | Who |
+|---|---|
+| press `poke` (update the noticeboard), `sync` (update the traffic light), or the clerk | **anyone** |
+| read the noticeboard's "Now" price | only the Spotter, Clipper and End |
+| read everything else (judge, status, limits) | anyone |
+| use the two hands | the traffic light (and rwaUSD's admins) |
+| change the rules, add/remove messengers, stop the board, roll back | rwaUSD's admins |
+| switch the bank over to our system (the spell) | rwaUSD's admins only |
+| change the simulated messengers' prices | the demo account only (in real life, their own networks) |
+
+---
+
+## Part 14: The whole flow in 10 simple lines (memorise these)
+1. **Four messengers** report the gold price. A broken one just says "not ok"; it can't crash anything.
+2. **The judge** ignores old or broken reports, takes the **weighted middle** price (no single messenger can move it), and throws out liars.
+3. The judge gives a **confidence score 0–100**: how much trust is working × how closely they agree × how fresh the newest price is.
+4. **The noticeboard** stores that price **one hour late**, **never shows zero**, and **holds back suspicious rises** (drops always pass).
+5. When the noticeboard updates, **the clerk copies it into the bank**: borrowing power = price ÷ 1.40.
+6. **The traffic light** compares the **live price** with **the bank's price**, plus the score and the board's health → 🟢 / 🟡 / 🔴, and 🛡️ when the bank's price is unfairly low.
+7. It acts **only through two small hands**: the **borrowing limit** ($250k/hour, then $50k, then $0) and a **pause on new liquidations** (max 6 hours).
+8. **Borrowers:** the bank checks the limit and the gold. **Paying back always works.**
+9. **Liquidators:** the bank checks the vault is really under-covered and that liquidations aren't paused.
+10. It's all switched on by **one approval from rwaUSD's admins**, with **no change to rwaUSD's code**, and switched off by **one more**.
+
+---
+
+## Quick self-check
+<details><summary>Where does the price enter the system?</summary>Through the four messengers (sources). Chainlink is real; the other three are simulated in the demo and updated by us or by their networks in real life.</details>
+<details><summary>Which button moves the price to the bank, and which one changes the colour?</summary>poke() updates the noticeboard and (through the clerk) the bank's price; sync() updates the traffic light and the limits.</details>
+<details><summary>Why does the bank use a price that is one hour old?</summary>So that a faked price only reaches the bank an hour later, leaving time to notice and react.</details>
+<details><summary>What does the traffic light compare?</summary>The live price from the judge vs the one-hour-late price the bank uses, plus the confidence score and the noticeboard's health.</details>
+<details><summary>Why can't one lying messenger change the price?</summary>The judge uses the weighted middle; one messenger holds at most 2 of 7 trust points, and moving the middle needs more than half (3.5).</details>
+<details><summary>What can never be blocked?</summary>Paying back a loan (and depositing gold).</details>
+<details><summary>What does 🛡️ do and why does it expire?</summary>It pauses new liquidations when the bank's price is unfairly low; it expires within 6 hours because blocking liquidations too long could leave the bank with bad loans.</details>

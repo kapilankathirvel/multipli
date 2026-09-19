@@ -26,6 +26,7 @@ Hackathon: 30 hours, team of 3 (see below). **Critical path = Kapilan K1→K5 (c
 | File | Use it for |
 |---|---|
 | `PROGRESS.md` | **Task board + session log. Update after every task.** |
+| `RUNNING.md` | **How to run everything** (tests, live anvil demo with cast scenarios, dashboard, research) + troubleshooting |
 | `PROBLEMS_AND_SOLUTIONS.md` | **Plain-language** problems → solutions → results → limits (for non-technical explanations) |
 | `START_HERE.md` | **Foundations from zero + study order + self-test.** Point new readers here first. |
 | `FLOW_EXPLAINED.md` | **End-to-end data flow with one running example** (sources → aggregator → SmartOSM → controller → executors → users). Keep in sync with code. |

@@ -74,7 +74,7 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - [x] Plug-in points ready: `DeployLib.wireExtras` + env `CALENDAR=<addr>` / `PYTH_SOURCE=<addr>` in `Deploy.s.sol` (PythSource replaces the Pyth mock with the same weight/maxAge). `test/fork/Integration.t.sol` (3) proves both plug in with no other change
 - [x] **Live end-to-end on anvil:** Deploy + Spell → GREEN 100; Pyth compromised ×10 + keeper tick via `cast` → YELLOW 71, mid unchanged. Ready for Jeffrey's `VITE_MODE=live`
 - [x] Three independent implementations of the score agree on review.md §R1.4: Solidity (forge), Python (Varun), TypeScript (Jeffrey's parity script). 110/110 tests green ✅ Sep 19
-- [ ] When Varun pushes SessionCalendar/PythSource: deploy them, rerun Deploy with `CALENDAR=… PYTH_SOURCE=…` (no code change needed)
+- [x] When Varun pushes SessionCalendar/PythSource: deploy them, rerun Deploy with `CALENDAR=… PYTH_SOURCE=…` (no code change needed)
 - **Commit:** `chore(integration): wire calendar/pyth, live demo fork`
 
 ### K8. Invariants (≈1.5h, only if time) · TESTING §5

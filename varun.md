@@ -28,9 +28,9 @@ Frozen interfaces you implement (don't edit; ask Kapilan): `ISessionCalendar`, `
 - **Commit:** `feat(calendar): SessionCalendar with weekly mask + holidays`
 
 ### V2. (OPTIONAL, only after V4/V1/V3) `PythSource`, a real second oracle (≈2h)
-- [ ] `contract PythSource is IPriceSource`: wraps Pyth `getPriceUnsafe(bytes32 id)` → WAD price, WAD conf, `publishTime` as updatedAt; `ok=false` if `conf/price > maxConfBps` or price ≤ 0; **never reverts** (try/catch)
-- [ ] Find the Pyth Ethereum mainnet contract address and the **PAXG/USD** (or XAU/USD) price-feed id from Pyth's docs; put them in the test
-- [ ] Fork test (block 26011000): observe() returns a sane gold price (±10% of $4,372); a reverting Pyth → `ok=false`
+- [x] `contract PythSource is IPriceSource`: wraps Pyth `getPriceUnsafe(bytes32 id)` → WAD price, WAD conf, `publishTime` as updatedAt; `ok=false` if `conf/price > maxConfBps` or price ≤ 0; **never reverts** (try/catch)
+- [x] Find the Pyth Ethereum mainnet contract address and the **PAXG/USD** (or XAU/USD) price-feed id from Pyth's docs; put them in the test
+- [x] Fork test (block 26011000): observe() returns a sane gold price (±10% of $4,372); a reverting Pyth → `ok=false`
 - **Commit:** `feat(sources): PythSource (real Pyth mainnet adapter)`
 
 ### V3. Demo bring-up scripts (≈1.5h)
@@ -65,5 +65,7 @@ The study structure is great: parity vectors pass, all 9 incidents, 500-run Mont
 - [ ] **Drift FN = 0 even at k = 4** is suspicious: if every source drifts together, the median follows and it should be a FN (like spike k = 4 = 100%). Check the drift magnitude vs the 2% tolerance and the truth labelling.
 - [ ] **SmartOSM isn't modelled** (1h delay + asymmetric quarantine, ADR-011 in `docs/DECISIONS.md`). Either add it, or state in RESULTS.md that the model covers Aggregator + RiskController only, and cross-reference the on-chain replay results in `review.md` §R2.4b (which include SmartOSM).
 - [ ] `research/__pycache__/*.pyc` got committed. Run `git rm -r --cached research/__pycache__` (`.gitignore` now ignores them).
+
+- [ ] (added Sep 19, Kapilan) **`scripts/demo-up.ps1` / `.sh`: add `--slow` to both `forge script` calls** (Deploy and Spell). Jeffrey found that without it anvil can leave the last transactions queued on this fork and forge waits forever (see `dashboard/DASHBOARD.md` §7.2 / §9).
 
 ## Budget ≈9h (V4 4.5h + V1 1.5h + V3 1.5h + V2 optional). Hand-off: send Jeffrey `research/RESULTS.md` + charts as soon as V4 lands (mentor slides); tell Kapilan when V1 is pushed (wired at K7).
