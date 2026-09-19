@@ -28,11 +28,13 @@
 - [ ] When `research/RESULTS.md` exists, fill `review.md` §R4.3 with the measured numbers and show the mentor.
 - [ ] Optional: send the mentor `review.md` §R1–R3 now for early feedback (the definitions are final; only the measurements are pending).
 
+### Integration heads-up (added Sep 19, K5)
+- [ ] Tell **Varun**: `script/Deploy.s.sol` + `script/Spell.s.sol` now exist and are tested on anvil, so his `demo-up` script can call them for real (exact commands in the header comments of each script). `deployments/fork.json` is written by Deploy (gitignored).
+- [ ] Tell **Jeffrey**: he can switch to live mode any time. Run anvil + Deploy + Spell (or Varun's demo-up); MockSources are controlled by anvil account #0.
+
 ### Dashboard (Jeffrey, added Sep 19 — J1/J2)
 - [ ] **Review the Oracle War Room in the browser** (`cd dashboard && pnpm dev` → http://localhost:5173) and confirm the panel checklist in `dashboard/README.md` §1. Drive the scenarios from DevTools: `og('s1')`, `og('s2')`, `og('s3')`, `og('s4')`, `og('reset')`.
-- [ ] Commit J1+J2 when happy — `dashboard/` is still **untracked** in git (`git add -A`, see `docs/GIT_WORKFLOW.md`). Note `dashboard/dist/` is gitignored.
-- [ ] (Kapilan) The dashboard's live mode assumes `deployments/fork.json` gains a `oracleguard.sources` map whose **keys** name the feeds (`chainlink`, `pyth`, `redstone`, `dexTwap`, or `mockA/B/C`) — as in `fork.example.json`. If the real deploy uses different keys, tell Jeffrey (otherwise the table falls back to slot order).
-- [ ] (Kapilan/Varun) The R3 controller numbers shown in the UI (lineCap $1,000,000 · greenGap $250,000/h · yellowGap $50,000 · ε 1.5% · ε_guard 3% · hole $400,000 · guard 6h) are hard-coded in `dashboard/src/protocol.ts`. If K4 ships different values, ping Jeffrey to update them (or expose them as controller views).
+- [ ] (Kapilan) The dashboard's live mode names the feeds from a `oracleguard.sources` map in `deployments/fork.json` whose **keys** are `chainlink`/`pyth`/`redstone`/`dexTwap` (or `mockA/B/C`), as in `fork.example.json`. If `Deploy.s.sol` writes different keys, tell Jeffrey — otherwise the table silently falls back to slot order.
 
 ### Ask the Multipli team (optional, strengthens the pitch)
 - [ ] (added Sep 19, design) Current Clipper `tail/cusp` and Calc params; is AutoLine or ClipperMom deployed?
@@ -41,6 +43,8 @@
 - [ ] (added Sep 19, design) Would they adopt a timelock on oracle config (our finding V5)?
 
 ## ✅ Done
+- [x] (added Sep 19, J1/J2) Commit the dashboard (`dashboard/` was untracked) ✅ Sep 19: commit `feat(dashboard): scaffold with mock/live data layer + Oracle War Room panels (mentor review R1/R3)`
+- [x] (added Sep 19, J1/J2) Confirm the R3 controller numbers hard-coded in `dashboard/src/protocol.ts` match the real deploy ✅ Sep 19: checked against K5's `script/DeployLib.sol` — greenGap 250,000 · yellowGap 50,000 · greenScore 80 · yellowScore 50 · epsBps 150 · epsLiqBps 300 · guard 6h · refill 1h · weights 2/2/2/1 (25h/1h/1h/1h) all identical. Re-check if `setIlk` config changes.
 - [x] (added Sep 19) Push Phase 1 to github.com/kapilankathirvel/multipli ✅ Sep 19: pushed by Kapilan
 - [x] (added Sep 19) Push the team-split commit ✅ Sep 19: pushed by Kapilan
 - [x] (added Sep 19, Phase 1) Delete the Foundry `Counter` template files ✅ Sep 19: Claude deleted `contracts/src/Counter.sol`, `contracts/test/Counter.t.sol`, `contracts/script/Counter.s.sol`, `contracts/README.md`

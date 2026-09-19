@@ -247,16 +247,16 @@ LineExecutor public lineExec; HoleExecutor public holeExec; SessionCalendar publ
    - else YELLOW if `r.score < greenScore` or `!open`.
    - else GREEN.
 3. **Hysteresis:** if target is worse than current, apply now and reset the streak. If better, increment `healthyStreak` only if `now >= lastHealthyCount + upgradeInterval`; upgrade one level when `healthyStreak >= kUp` (prevents same-block spam upgrades).
-4. **Apply line:** `debt = Art * rate` (RAD).
-   - GREEN: `line = lineCapRad`
-   - YELLOW: `line = min(debt + yellowGapRad, lineCapRad)`
+4. **Apply line:** `debt = Art * rate` (RAD). *(Implemented per review.md §R3.)*
+   - GREEN: `line = min(debt + greenGapRad, lineCapRad)`, refilled at most once per `refillInterval` (**rate limit**: new debt ≤ greenGap per hour even for undetected failures)
+   - YELLOW: `line = min(debt_at_entry + yellowGapRad, lineCapRad)`, anchored on entry and **never raised while YELLOW**
    - RED: `line = debt`, so any `dart > 0` reverts `Vat/ceiling-exceeded`; repay (`dart < 0`) always passes.
    - Only call the executor if the value changed.
    - Note: Maker's `Clipper.getFeedPrice()` resolves the pip via `spotter.ilks(ilk)` dynamically, so the `Spotter.file` swap is picked up by the Clipper with no change.
 5. **Liquidation guard:**
    - Condition `G = r.ok && r.score >= greenScore && r.hi * (1e4 - epsLiqBps) > osmCur * 1e4` (live market well above the delayed OSM, with agreement).
    - If `G && !guardActive`: `holeExec.setHole(ilk, 0)` (Dog.bark needs `hole > dirt`, so 0 always blocks; don't read a moving `dirt`), `guardActive = true`, `guardSince = now`, emit `GuardOn`.
-   - If `guardActive && (!G || now - guardSince > guardMaxDuration)`: `holeExec.setHole(ilk, holeCapRad)`, `guardActive = false`, emit `GuardOff(expired)`.
+   - If `guardActive && (!G || now - guardSince > guardMaxDuration)`: `holeExec.setHole(ilk, holeCapRad)`, `guardActive = false`, emit `GuardOff(expired)`. After an expiry the guard is **latched**: it won't re-arm until `G` has been false once (so liquidations can never be paused indefinitely).
 6. Emit `Synced(ilk, state, r.score, r.mid, osmCur, lineRad, guardActive)` and `StateChanged(ilk, from, to)` on change.
 
 **Views for UI:** `status(ilk) returns (State, uint16 score, bool guard, uint256 lineRad, uint256 debtRad)`.

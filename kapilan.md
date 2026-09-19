@@ -49,17 +49,18 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(osm): SmartOSM drop-in with freshness, quarantine, zero-price invariant`
 
 ### K4. `RiskController` (≈2.5h) · §6
-- [ ] GREEN/YELLOW/RED, spaced hysteresis, line via executor, guard via executor
-- [ ] **Mentor review R3/R4:** GREEN line = `min(debt + greenGap, lineCap)`, refilled at most once per `refillInterval` (1h), i.e. a **rate limit** so `MaxLoss ≤ greenGap × hours` even for undetected correlated failures. Exact state table: `review.md` §R3
-- [ ] **Calendar is optional:** if `calendar == address(0)` treat the market as always open. That removes any dependency on Varun's SessionCalendar
+- [x] GREEN/YELLOW/RED, spaced hysteresis (one level per kUp syncs ≥ upgradeInterval apart), line via executor, guard via executor
+- [x] **Mentor review R3/R4:** GREEN rate-limited headroom (`debt + greenGap`, refill ≤ 1/h); YELLOW anchored on entry and never raised; RED `line = debt`; guard `hole = 0` with 6h expiry + latch
+- [x] Calendar optional (`sessionAsset = 0` or no calendar = always open; a reverting calendar → YELLOW)
+- [x] `test/unit/RiskController.t.sol` (15): rate limit, cap, YELLOW leak-bound, market closed, RED (stale / market below OSM / quarantine), repay lowers line, spam-proof upgrades, guard on/release/expiry+latch, no guard on a real crash, auth. ✅ Sep 19
 - **Commit:** `feat(controller): GREEN/YELLOW/RED risk controller + liquidation guard`
 
 ### K5. `Deploy.s.sol` + `Spell.s.sol` (≈1h) · §7
-- [ ] Deploy everything, write `deployments/fork.json` (frozen schema); spell as the Safe; rollback
+- [x] `script/DeployLib.sol` (shared by scripts AND tests), `Deploy.s.sol` (writes `deployments/fork.json`, frozen schema), `Spell.s.sol` (run as Safe; `--sig "rollback()"`). **Smoke-tested on a live anvil fork:** pip → SmartOSM, GREEN, score 100, line = debt + $250k. ✅ Sep 19
 - **Commit:** `feat(scripts): Deploy and Spell scripts (Safe-impersonated install + rollback)`
 
 ### K6. `OracleGuard.t.sol` fork tests (≈2h), the proof
-- [ ] S1a/S1b, S2, S3, S4 + repay-always + rollback (mirror `Baseline.t.sol`)
+- [x] `test/fork/OracleGuard.t.sol` (8): S1a YELLOW (mint capped at $50k), S1b RED (mint reverts, **repay works**, price never 0), S2 RED with liquidations on, S3a legacy feed swap has no effect, S3b compromised source → **$0 bad debt** (vs $268,595), S4 guard blocks unfair liquidation then releases, install + rollback. ✅ Sep 19
 - **Commit:** `test(fork): OracleGuard neutralises S1-S4 on real rwaUSD`
 
 ### K6b. Mentor review R2: incident replay on the real contracts (≈1.5h)

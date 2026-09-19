@@ -9,7 +9,7 @@ It contains **four asks**. Each gets a precise answer, a deliverable, an owner, 
 |---|---|---|---|---|
 | R1 | Define the score + each oracle's contribution | §R1 below + weight-based `Wq` in the contract (K2.1) + contribution column in the UI | Kapilan (contract), Jeffrey (UI) | 🟨 contract ✅ (parity vectors pass), UI pending |
 | R2 | Test against real historical failures incl. correlated ones; report FP/FN | Python validation study (Varun V4) + Solidity incident replay on the real contracts (Kapilan K6b) → `research/RESULTS.md` | Varun, Kapilan | ⬜ |
-| R3 | Specify exactly what GREEN/YELLOW/RED changes | §R3 below (parameter-level table) + UI panel | Kapilan (spec+contract), Jeffrey (UI) | ✅ spec written here |
+| R3 | Specify exactly what GREEN/YELLOW/RED changes | §R3 below (parameter-level table) + UI panel | Kapilan (spec+contract), Jeffrey (UI) | 🟨 spec ✅ + contract ✅ (`RiskController`, 15 tests), UI pending |
 | R4 | Quantify the risk reduction | §R4: deterministic bounds now, measured numbers from R2 | Varun (numbers), Jeffrey (slide) | 🟨 bounds done, measurement pending |
 
 ---
@@ -161,9 +161,10 @@ Proposed PAXG parameters: `lineCap` 1,000,000 · `greenGap` 250,000/h · `yellow
 ### R4.2 Measured on the real contracts (fork tests)
 | Scenario | Legacy | OracleGuard (K6) |
 |---|---|---|
-| S3 feed compromise, 10 PAXG | **$268,595 bad debt** ($312,319 minted vs $43,724 collateral) | target $0 |
-| S4 captured wick | healthy 145% vault liquidated: 10 PAXG seized, 5% penalty ≈ $2.2k + auction discount | target: 0 unjust liquidations |
-| S1 stale 7 days | 31,231 rwaUSD minted on a 186h-old price | target: mint reverts, repay works |
+| S3 feed compromise, 10 PAXG | **$268,595 bad debt** ($312,319 minted vs $43,724 collateral) | ✅ **$0 bad debt**: legacy feed swap has no effect; a compromised Chainlink is an outlier → max draw $31,231 < $43,724 collateral |
+| S4 captured wick | healthy 145% vault liquidated: 10 PAXG seized, 5% penalty ≈ $2.2k + auction discount | ✅ **0 unjust liquidations**: guard → `Dog/liquidation-limit-hit`, released after one hop, vault safe |
+| S1 stale 7 days | 31,231 rwaUSD minted on a 186h-old price | ✅ one source stale → YELLOW, new debt capped at $50k; all stale → RED, mint reverts, **repay works**, price never 0 |
+| S2 market −8% while the OSM lags | mint at the stale-high price | ✅ RED immediately; liquidations stay ON |
 
 ### R4.3 From the validation study (R2, to be filled by Varun's results)
 Expected bad debt per $1M of vault debt per year (legacy vs OracleGuard), FN/FP rates per incident class, unjust-liquidation count, and time spent in YELLOW/RED on normal days (the cost to users). → `research/RESULTS.md`
