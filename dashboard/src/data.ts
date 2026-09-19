@@ -4,6 +4,7 @@ import {
   formatUnits,
   getAddress,
   http,
+  parseAbi,
   toHex,
   type Abi,
   type Address,
@@ -16,12 +17,14 @@ import controllerAbiJson from './abi/IRiskController.json' with { type: 'json' }
 import osmAbiJson from './abi/ISmartOSM.json' with { type: 'json' }
 import vatAbiJson from './abi/IVat.json' with { type: 'json' }
 import forkExample from './fork.example.json' with { type: 'json' }
+import { fetchMainnet, type MainnetData, type RealFeed } from './mainnet'
 import {
   P,
   aggregate,
   deriveState,
   factorsOf,
   lineFor,
+  scoreOf,
   type Factors,
   type Feed,
   type OsmStatus,
@@ -31,12 +34,13 @@ import {
 } from './protocol'
 
 export type { Factors, Reading, Source } from './protocol'
-export { effectsFor, P } from './protocol'
+export { effectsFor, P, pointsOf } from './protocol'
 
 const aggregatorAbi = aggregatorAbiJson as Abi
 const osmAbi = osmAbiJson as Abi
 const controllerAbi = controllerAbiJson as Abi
 const vatAbi = vatAbiJson as Abi
+const spotterAbi = parseAbi(['function ilks(bytes32) view returns (address pip, uint256 mat)'])
 
 /** bytes32("paxg") */
 export const ILK =
@@ -44,13 +48,22 @@ export const ILK =
 
 export const SOURCE_NAMES = ['Chainlink', 'Pyth', 'RedStone', 'DEX TWAP'] as const
 
-/** Weights and maxAge per review.md R1.1. The mock world uses these; live reads them from sourceAt(). */
-const SOURCE_CFG: { name: string; weight: number; maxAgeSec: number }[] = [
-  { name: 'Chainlink', weight: 2, maxAgeSec: 25 * 3600 },
-  { name: 'Pyth', weight: 2, maxAgeSec: 3600 },
-  { name: 'RedStone', weight: 2, maxAgeSec: 3600 },
-  { name: 'DEX TWAP', weight: 1, maxAgeSec: 3600 },
-]
+/**
+ * Weight and maxAge per source: the same values script/DeployLib.sol configures on the
+ * fork (review.md R1.1). Fork mode reads them from the aggregator instead.
+ */
+const SOURCE_CFG: Record<RealFeed['key'], { name: string; weight: number; maxAgeSec: number }> = {
+  chainlink: { name: 'Chainlink', weight: 2, maxAgeSec: 25 * 3600 },
+  pyth: { name: 'Pyth', weight: 2, maxAgeSec: 3600 },
+  redstone: { name: 'RedStone', weight: 2, maxAgeSec: 3600 },
+  dexTwap: { name: 'DEX TWAP', weight: 1, maxAgeSec: 3600 },
+}
+
+/**
+ * mainnet: real Ethereum-mainnet feeds + Maker state, OracleGuard modelled in the browser
+ * fork:    a local anvil fork with OracleGuard really deployed (Deploy + Spell), read on-chain
+ */
+export type Mode = 'mainnet' | 'fork'
 
 export type OsmState = {
   cur: number
@@ -62,9 +75,10 @@ export type OsmState = {
 export type Risk = {
   state: RiskState
   guard: boolean
+  /** the debt ceiling OracleGuard sets for this state */
   lineUsd: number
   debtUsd: number
-  /** why the controller is in this state (mock derives it; live shows the score) */
+  /** why the controller is in this state */
   reason: string
 }
 
@@ -82,43 +96,39 @@ export type LogEvent = {
 }
 
 export type Snapshot = {
+  mode: Mode
+  block: number
   sources: Source[]
   reading: Reading
   factors: Factors
+  /** fork only: the score the deployed aggregator computes (old product formula until ported) */
+  chainScore?: number
   osm: OsmState
   risk: Risk
+  /** the Vat's own numbers for ilk paxg: debt and the debt ceiling currently in force */
+  vat: { debtUsd: number; lineUsd: number }
+  /** Spotter.mat: collateral ratio (1.40 = borrow up to 1/1.4 of the collateral value) */
+  mat: number
   legacy: Legacy
   events: LogEvent[]
-  mode: 'mock' | 'live'
-  error?: string
   updatedAt: number
 }
 
 export type BorrowStatus = 'open' | 'limited' | 'frozen'
 
-export type DataProvider = {
-  start(onUpdate: (snap: Snapshot) => void): () => void
-  /** J3 will drive this; mock already applies named scripts. */
-  applyScript(name: MockScriptName): void
-}
+export type ScriptName = 'reset' | 's1' | 's2' | 's3' | 's4' | 'poke' | 'sync' | 'warp1h'
 
-export type MockScriptName =
-  | 'idle'
-  | 'reset'
-  | 's1'
-  | 's2'
-  | 's3'
-  | 's4'
-  | 'poke'
-  | 'sync'
-  | 'warp1h'
+export type DataProvider = {
+  start(onUpdate: (snap: Snapshot) => void, onError: (msg: string) => void): () => void
+  /** mainnet mode: the scenario buttons apply their faults on top of the real feeds */
+  applyScript(name: ScriptName): void
+}
 
 const OSM_STATUS: OsmStatus[] = ['UNINIT', 'LIVE', 'STALE', 'QUARANTINED', 'STOPPED']
 const RISK_STATE: RiskState[] = ['GREEN', 'YELLOW', 'RED']
 
-const BASE_PRICE = 4372.478
-const START_DEBT = 43_029
-const POLL_MS = 2000
+const TICK_MS = 2000
+const MAINNET_FETCH_MS = 6000 // ~ half a block; public RPC friendly
 
 export type ForkShape = {
   rpc: string
@@ -132,14 +142,16 @@ export type ForkShape = {
   }
   maker: {
     vat: string
+    spotter?: string
     legacyOsm: string
   }
 }
 
 const bundledFork = forkExample as ForkShape
 
-export function mode(): 'mock' | 'live' {
-  return import.meta.env.VITE_MODE === 'live' ? 'live' : 'mock'
+export function mode(): Mode {
+  const m = import.meta.env.VITE_MODE
+  return m === 'fork' || m === 'live' ? 'fork' : 'mainnet'
 }
 
 export function borrowStatus(risk: Risk): BorrowStatus {
@@ -156,10 +168,6 @@ function radToUsd(rad: bigint): number {
   return Number(formatUnits(rad, 45))
 }
 
-function jitter(n: number, bps: number): number {
-  return n + (Math.random() * 2 - 1) * (bps / 10_000) * n
-}
-
 function fmtUsd(n: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
@@ -174,126 +182,79 @@ function pushEvent(events: LogEvent[], name: string, detail: string): LogEvent[]
   return [ev, ...events].slice(0, 40)
 }
 
-// ── mock ────────────────────────────────────────────────────────────────────
+// ── mainnet ─────────────────────────────────────────────────────────────────
 //
-// The mock is a small simulation, not a set of canned screenshots: scenarios only
-// move the *feeds* (price, freshness, liveness) and the aggregator + controller
-// logic in protocol.ts derives score, state, line and guard from them. That keeps
-// every panel consistent with the contracts, and J3's buttons just call applyScript.
+// Inputs are real (mainnet.ts). OracleGuard is not deployed on mainnet, so its SmartOSM
+// and RiskController run here, on protocol.ts. The scenario buttons never invent prices:
+// they apply a fault (time warp, publishers down, a multiplier) on top of the real feeds.
 
-type MockFeed = {
-  name: string
-  weight: number
-  maxAgeSec: number
-  price: number
-  updatedAt: number
-  ok: boolean
-}
-
-type MockWorld = {
-  script: MockScriptName
-  warp: number // simulated seconds added by time warps / scenarios
-  market: number // the "true" market price the healthy feeds track
-  feedsFrozen: boolean // scenario S1: nobody refreshes the feeds any more
-  clMul: number // scenario S3: compromised Chainlink multiplier
-  clFrozen: boolean // scenario S2: Chainlink keeps quoting the pre-drop price
-  feeds: MockFeed[]
+type World = {
+  data: MainnetData
+  warp: number // simulated seconds added by the buttons
+  frozen?: RealFeed[] // S1: publishers stopped at this snapshot
+  clMul: number // S3: compromised Chainlink multiplier
+  fastMul: number // S2: the fast feeds move, Chainlink lags
+  wickMul: number // S4: a short-lived dip on every feed
   osm: { cur: number; nxt: number; lastGoodAt: number; zzz: number; quarantined: boolean }
-  debtUsd: number
+  keeperTriedAt: number
   state: RiskState
   guard: boolean
-  legacy: { price: number; updatedAt: number }
   events: LogEvent[]
 }
 
-function simNow(w: MockWorld): number {
-  return Math.floor(Date.now() / 1000) + w.warp
+function realNow(): number {
+  return Math.floor(Date.now() / 1000)
 }
 
-function seedWorld(): MockWorld {
-  const now = Math.floor(Date.now() / 1000)
-  const w: MockWorld = {
-    script: 'idle',
-    warp: 0,
-    market: BASE_PRICE,
-    feedsFrozen: false,
-    clMul: 1,
-    clFrozen: false,
-    feeds: SOURCE_CFG.map((c) => ({
-      ...c,
-      price: BASE_PRICE,
-      // Chainlink is a deviation feed: quiet is normal, so it starts 16.5h old
-      updatedAt: c.name === 'Chainlink' ? now - 16.5 * 3600 : now - 20,
-      ok: true,
-    })),
-    osm: { cur: BASE_PRICE, nxt: BASE_PRICE, lastGoodAt: now, zzz: now, quarantined: false },
-    debtUsd: START_DEBT,
-    state: 'GREEN',
-    guard: false,
-    legacy: { price: BASE_PRICE, updatedAt: now - 16.5 * 3600 },
-    events: [],
-  }
-  w.events = pushEvent(
-    pushEvent([], 'Synced', `ilk=paxg state=GREEN line=$${fmtUsd(lineFor('GREEN', START_DEBT))}`),
-    'Init',
-    `SmartOSM primed from legacy cur $${fmtUsd(BASE_PRICE)}`,
-  )
-  return w
+function simNow(w: World): number {
+  return realNow() + w.warp
 }
 
-/** Refresh the feeds that are still being published, then drift the market a little. */
-function advanceFeeds(w: MockWorld): void {
-  const now = simNow(w)
-  w.market = jitter(w.market, 1.5)
-  if (w.feedsFrozen) return
-  for (const f of w.feeds) {
-    if (f.name === 'Chainlink') {
-      if (w.clFrozen) continue
-      // a deviation feed only publishes on a 0.5% move or its 24h heartbeat
-      const candidate = jitter(w.market, 2) * w.clMul
-      if (Math.abs(candidate - f.price) / f.price > 0.005 || now - f.updatedAt > 24 * 3600) {
-        f.price = candidate
-        f.updatedAt = now
-      }
-    } else {
-      f.price = jitter(w.market, 3)
-      f.updatedAt = now
+function feedsOf(w: World): Feed[] {
+  // publishers keep publishing in real time, so a live feed's age uses the real clock;
+  // once S1 stops them, their age runs on the (warped) simulated clock
+  const base = w.frozen ?? w.data.feeds
+  const now = w.frozen ? simNow(w) : realNow()
+  return base.map((f) => {
+    const cfg = SOURCE_CFG[f.key]
+    const mul = (f.key === 'chainlink' ? w.clMul : w.fastMul) * w.wickMul
+    return {
+      ...cfg,
+      price: f.price * mul,
+      ageSec: f.ok ? Math.max(0, now - f.updatedAt) : 0,
+      ok: f.ok,
+      via: f.via,
     }
-  }
-  const cl = w.feeds[0]
-  w.legacy = { price: cl.price, updatedAt: cl.updatedAt }
+  })
 }
 
-function feedsOf(w: MockWorld): Feed[] {
-  const now = simNow(w)
-  return w.feeds.map((f) => ({
-    name: f.name,
-    weight: f.weight,
-    maxAgeSec: f.maxAgeSec,
-    price: f.price,
-    ageSec: Math.max(0, now - f.updatedAt),
-    ok: f.ok,
-  }))
+function readingOf(w: World): Reading {
+  return aggregate(feedsOf(w)).reading
 }
 
-function osmStatusOf(w: MockWorld): OsmStatus {
+function osmStatusOf(w: World): OsmStatus {
   if (w.osm.quarantined) return 'QUARANTINED'
   if (simNow(w) - w.osm.lastGoodAt > P.staleLimitSec) return 'STALE'
   return 'LIVE'
 }
 
+function debtOf(w: World): number {
+  return w.data.vat.debtUsd
+}
+
 /** The keeper's `sync()`: recompute state + guard and log what changed. */
-function syncState(w: MockWorld, reading: Reading, loud: boolean): void {
+function syncState(w: World, loud: boolean): void {
+  const reading = readingOf(w)
   const v = deriveState(reading, w.osm.cur, osmStatusOf(w))
   if (v.state !== w.state) {
-    w.events = pushEvent(w.events, 'StateChanged', `${w.state} -> ${v.state} (${v.reason})`)
+    w.events = pushEvent(w.events, 'StateChanged', `${w.state} → ${v.state} (${v.reason})`)
     w.state = v.state
   }
   if (v.guard !== w.guard) {
     w.events = pushEvent(
       w.events,
       v.guard ? 'GuardOn' : 'GuardOff',
-      v.guard ? 'ilk=paxg - Dog.hole = 0, new liquidations paused' : 'ilk=paxg - Dog.hole restored',
+      v.guard ? 'Dog.hole = 0, new liquidations paused' : 'Dog.hole restored',
     )
     w.guard = v.guard
   }
@@ -301,20 +262,21 @@ function syncState(w: MockWorld, reading: Reading, loud: boolean): void {
     w.events = pushEvent(
       w.events,
       'Synced',
-      `state=${w.state} score=${reading.score} line=$${fmtUsd(lineFor(w.state, w.debtUsd))} guard=${w.guard ? 'on' : 'off'}`,
+      `state=${w.state} score=${reading.score} line=$${fmtUsd(lineFor(w.state, debtOf(w)))} guard=${w.guard ? 'on' : 'off'}`,
     )
   }
 }
 
-/** The keeper's `poke()`: mirrors SmartOSM.poke (quorum check, jump quarantine, cur <- nxt). */
-function pokeOsm(w: MockWorld, reading: Reading): void {
+/** Mirrors SmartOSM.poke: quorum check, upward-jump quarantine (ADR-011), cur ← nxt ← mid. */
+function pokeOsm(w: World): void {
   const now = simNow(w)
+  w.keeperTriedAt = now
+  const reading = readingOf(w)
   if (!reading.ok || reading.mid === 0) {
+    // zzz is NOT advanced (same as the contract), so the price keeps ageing -> STALE
     w.events = pushEvent(w.events, 'PokeSkipped', `reason=NO_QUORUM score=${reading.score}`)
     return
   }
-  // ADR-011: only a low-agreement *upward* jump is held back (an unfairly low price is the
-  // guard's job). The already-vetted `nxt` still advances into `cur`, so the pipeline flows.
   const jumpBps = w.osm.nxt > 0 ? (Math.abs(reading.mid - w.osm.nxt) / w.osm.nxt) * 10_000 : 0
   if (
     reading.mid > w.osm.nxt &&
@@ -324,6 +286,7 @@ function pokeOsm(w: MockWorld, reading: Reading): void {
   ) {
     w.osm.cur = w.osm.nxt
     w.osm.quarantined = true
+    w.osm.zzz = now
     w.events = pushEvent(
       w.events,
       'Quarantined',
@@ -343,93 +306,118 @@ function pokeOsm(w: MockWorld, reading: Reading): void {
   )
 }
 
-function applyMockScript(w: MockWorld, script: MockScriptName): MockWorld {
-  const reading = () => aggregate(feedsOf(w)).reading
+/** SmartOSM.poke reverts `OSM/not-passed` before zzz + hop, so jump the clock there first. */
+function waitForHop(w: World): void {
+  const due = w.osm.zzz + P.hopSec - simNow(w)
+  if (due > 0) w.warp += due
+}
 
+/** State right after the spell: SmartOSM primed from the legacy OSM's price, controller synced. */
+function seedWorld(data: MainnetData): World {
+  const now = realNow()
+  const w: World = {
+    data,
+    warp: 0,
+    clMul: 1,
+    fastMul: 1,
+    wickMul: 1,
+    osm: {
+      cur: data.legacy.price,
+      nxt: data.legacy.price,
+      lastGoodAt: now,
+      zzz: now,
+      quarantined: false,
+    },
+    keeperTriedAt: now,
+    state: 'GREEN',
+    guard: false,
+    events: [],
+  }
+  const r = readingOf(w)
+  if (r.ok) w.osm.nxt = r.mid
+  w.events = pushEvent([], 'Init', `SmartOSM primed from the legacy OSM price $${fmtUsd(data.legacy.price)}`)
+  syncState(w, true)
+  return w
+}
+
+function applyScript(w: World, script: ScriptName): World {
   switch (script) {
     case 'reset': {
-      const fresh = seedWorld()
-      fresh.events = pushEvent(w.events, 'Reset', 'reverted to snapshot')
+      const fresh = seedWorld(w.data)
+      fresh.events = pushEvent(fresh.events, 'Reset', 'faults cleared, back to the real feeds')
       return fresh
     }
 
     case 's1': {
-      // stale feed: warp 25h and stop publishing -> everything ages out of maxAge
-      w.warp += 25 * 3600
-      w.feedsFrozen = true
-      w.events = pushEvent(w.events, 'Scenario', 'S1 stale feed - warp +25h, publishers down')
-      pokeOsm(w, reading())
-      syncState(w, reading(), true)
+      // publishers go down, then 26h pass: every feed ages past its maxAge
+      w.frozen = w.data.feeds.map((f) => ({ ...f }))
+      w.warp += 26 * 3600
+      w.events = pushEvent(w.events, 'Scenario', 'S1 stale feed: publishers down, +26h')
+      pokeOsm(w)
+      syncState(w, true)
       return w
     }
 
     case 's2': {
-      // real market drop of 8%; the slow push feed keeps quoting the old price
-      w.market *= 0.92
-      w.clFrozen = true
-      w.events = pushEvent(w.events, 'Scenario', 'S2 market -8% - fast feeds follow, Chainlink lags')
-      advanceFeeds(w)
-      syncState(w, reading(), true)
+      // a real 8% drop: the fast feeds follow, Chainlink (deviation feed) still quotes the old price
+      w.fastMul *= 0.92
+      w.events = pushEvent(w.events, 'Scenario', 'S2 market −8%: fast feeds follow, Chainlink lags')
+      syncState(w, true)
       return w
     }
 
     case 's3': {
       // one compromised source reports 10x
       w.clMul = 10
-      w.clFrozen = false
-      w.events = pushEvent(w.events, 'Scenario', 'S3 compromised source - Chainlink x10')
-      advanceFeeds(w)
-      pokeOsm(w, reading())
-      syncState(w, reading(), true)
+      w.events = pushEvent(w.events, 'Scenario', 'S3 compromised source: Chainlink ×10')
+      waitForHop(w)
+      pokeOsm(w)
+      syncState(w, true)
       return w
     }
 
     case 's4': {
-      // captured wick: all sources dip 15%, the OSM captures it, then the market recovers
-      const before = w.market
-      w.market = before * 0.85
-      advanceFeeds(w)
-      w.events = pushEvent(w.events, 'Scenario', 'S4 captured wick - all sources -15%')
-      pokeOsm(w, reading())
-      w.warp += P.hopSec
-      advanceFeeds(w) // publishers refresh after the warp, still at the wick price
-      pokeOsm(w, reading()) // the wick is now `cur`, the price every vault is valued at
-      w.market = before
-      advanceFeeds(w)
-      syncState(w, reading(), true)
+      // captured wick: every feed dips 15% for two hops, the OSM captures it as `cur`, then it recovers
+      w.wickMul = 0.85
+      w.events = pushEvent(w.events, 'Scenario', 'S4 captured wick: all sources −15%')
+      waitForHop(w)
+      pokeOsm(w)
+      waitForHop(w)
+      pokeOsm(w) // the wick is now `cur`, the price every vault is valued at
+      w.wickMul = 1
+      syncState(w, true)
       return w
     }
 
     case 'poke': {
-      pokeOsm(w, reading())
-      syncState(w, reading(), false)
+      waitForHop(w)
+      pokeOsm(w)
+      syncState(w, false)
       return w
     }
 
     case 'sync': {
-      syncState(w, reading(), true)
+      syncState(w, true)
       return w
     }
 
     case 'warp1h': {
-      // same steps as the live runner: warp -> refresh the sources (1h maxAge) -> poke -> sync
       w.warp += P.hopSec
-      w.events = pushEvent(w.events, 'Warp', '+1h (evm_increaseTime)')
-      advanceFeeds(w)
-      pokeOsm(w, reading())
-      syncState(w, reading(), false)
+      w.events = pushEvent(w.events, 'Warp', '+1h')
+      pokeOsm(w)
+      syncState(w, false)
       return w
     }
-
-    default:
-      return w
   }
 }
 
-function snapFromWorld(w: MockWorld): Snapshot {
+function snapFromWorld(w: World): Snapshot {
   const { sources, reading, factors } = aggregate(feedsOf(w))
   const now = simNow(w)
+  const status = osmStatusOf(w)
   return {
+    mode: 'mainnet',
+    block: w.data.block,
     sources,
     reading,
     factors,
@@ -437,55 +425,79 @@ function snapFromWorld(w: MockWorld): Snapshot {
       cur: w.osm.cur,
       nxt: w.osm.nxt,
       ageSec: Math.max(0, now - w.osm.lastGoodAt),
-      status: osmStatusOf(w),
+      status,
     },
     risk: {
       state: w.state,
       guard: w.guard,
-      lineUsd: lineFor(w.state, w.debtUsd),
-      debtUsd: w.debtUsd,
-      reason: deriveState(reading, w.osm.cur, osmStatusOf(w)).reason,
+      lineUsd: lineFor(w.state, debtOf(w)),
+      debtUsd: debtOf(w),
+      reason: deriveState(reading, w.osm.cur, status).reason,
     },
+    vat: w.data.vat,
+    mat: w.data.mat,
     legacy: {
-      price: w.legacy.price,
-      valid: true, // the legacy OSM never reports staleness -- that is the whole point
-      ageHours: Math.max(0, now - w.legacy.updatedAt) / 3600,
+      // the legacy stack reads Chainlink through the adapter, so S3's x10 reaches it too
+      price: w.data.legacy.price * w.clMul,
+      valid: w.data.legacy.valid,
+      ageHours: Math.max(0, now - w.data.legacy.zzz) / 3600,
     },
     events: w.events,
-    mode: 'mock',
     updatedAt: Date.now(),
   }
 }
 
-export function createMockProvider(): DataProvider {
-  let world = seedWorld()
-  let timer: ReturnType<typeof setInterval> | undefined
+export function createMainnetProvider(): DataProvider {
+  let world: World | undefined
   let emit: ((s: Snapshot) => void) | undefined
+  let fail: ((msg: string) => void) | undefined
+  const timers: ReturnType<typeof setInterval>[] = []
+
+  const fetchNow = async () => {
+    try {
+      const data = await fetchMainnet()
+      if (!world) world = seedWorld(data)
+      else world.data = data
+      tick()
+    } catch (err) {
+      fail?.(`Mainnet read failed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
+    }
+  }
 
   const tick = () => {
-    advanceFeeds(world)
-    syncState(world, aggregate(feedsOf(world)).reading, false)
+    if (!world) return
+    // a keeper pokes once per hop, like production; skipped pokes are retried a hop later
+    const now = simNow(world)
+    if (now - world.osm.zzz >= P.hopSec && now - world.keeperTriedAt >= P.hopSec) {
+      world.keeperTriedAt = now
+      pokeOsm(world)
+    }
+    syncState(world, false)
     emit?.(snapFromWorld(world))
   }
 
   return {
-    start(onUpdate) {
+    start(onUpdate, onError) {
       emit = onUpdate
-      tick()
-      timer = setInterval(tick, POLL_MS)
+      fail = onError
+      void fetchNow()
+      timers.push(setInterval(() => void fetchNow(), MAINNET_FETCH_MS))
+      timers.push(setInterval(tick, TICK_MS))
       return () => {
-        if (timer) clearInterval(timer)
+        timers.forEach(clearInterval)
         emit = undefined
+        fail = undefined
       }
     },
     applyScript(name) {
-      world = applyMockScript(world, name)
+      if (!world) return
+      world = applyScript(world, name)
       emit?.(snapFromWorld(world))
     },
   }
 }
 
-// ── live ────────────────────────────────────────────────────────────────────
+// ── fork ────────────────────────────────────────────────────────────────────
 
 function decodeReason(reason: number): string {
   return { 1: 'NO_QUORUM', 2: 'AGGREGATOR_FAILED' }[reason] ?? `code=${reason}`
@@ -515,7 +527,7 @@ export async function loadFork(): Promise<ForkShape> {
     const res = await fetch('/fork.json')
     if (res.ok) return (await res.json()) as ForkShape
   } catch {
-    /* bundled example until Kapilan writes deployments/fork.json */
+    /* bundled example until Deploy writes deployments/fork.json */
   }
   return bundledFork
 }
@@ -532,9 +544,6 @@ function nameFor(addr: string, i: number, fork: ForkShape): string {
     pyth: 'Pyth',
     redstone: 'RedStone',
     dexTwap: 'DEX TWAP',
-    mockA: 'Mock A',
-    mockB: 'Mock B',
-    mockC: 'Mock C',
   }
   for (const [key, value] of Object.entries(fork.oracleguard.sources ?? {})) {
     try {
@@ -546,11 +555,13 @@ function nameFor(addr: string, i: number, fork: ForkShape): string {
   return SOURCE_NAMES[i] ?? `source[${i}]`
 }
 
+type SourceCfg = { name: string; weight: number; maxAgeSec: number }
+
 async function readSourceCfg(
   client: PublicClient,
   aggregator: Address,
   fork: ForkShape,
-): Promise<{ name: string; weight: number; maxAgeSec: number }[]> {
+): Promise<SourceCfg[]> {
   const count = (await client.readContract({
     address: aggregator,
     abi: aggregatorAbi,
@@ -573,11 +584,7 @@ async function readSourceCfg(
   }))
 }
 
-async function readLive(
-  client: PublicClient,
-  fork: ForkShape,
-  cfg: { name: string; weight: number; maxAgeSec: number }[],
-): Promise<Snapshot> {
+async function readFork(client: PublicClient, fork: ForkShape, cfg: SourceCfg[]): Promise<Snapshot> {
   const aggregator = fork.oracleguard.aggregator as Address
   const smartOsm = fork.oracleguard.smartOsm as Address
   const controller = fork.oracleguard.controller as Address
@@ -588,7 +595,7 @@ async function readLive(
   const head = await client.getBlockNumber({ cacheTime: 0 })
   const fromBlock = head > 2_000n ? head - 2_000n : 0n
 
-  const [block, reading, obs, price, osmStatus, age, risk, ilk, legacySlot, logs] =
+  const [block, reading, obs, price, osmStatus, age, risk, ilk, legacySlot, logs, spot] =
     await Promise.all([
       client.getBlock({ blockNumber: head }),
       client.readContract({
@@ -647,6 +654,16 @@ async function readLive(
       client
         .getLogs({ address: [smartOsm, controller], fromBlock, toBlock: head })
         .catch(() => []),
+      fork.maker.spotter
+        ? client
+            .readContract({
+              address: fork.maker.spotter as Address,
+              abi: spotterAbi,
+              functionName: 'ilks',
+              args: [ILK],
+            })
+            .catch(() => null)
+        : Promise.resolve(null),
     ])
 
   // the legacy OSM is a Maker OSM: `zzz` is the last accepted update, so its true age
@@ -671,12 +688,13 @@ async function readLive(
       share: c.weight / totalWeight,
       maxAgeSec: c.maxAgeSec,
       counts: (fresh[i] ?? false) && (inlier[i] ?? false),
+      via: c.name === 'Chainlink' ? 'real Chainlink feed (forked)' : 'MockSource (demo-controlled)',
     }
   })
 
   const legacy = parseLegacyCur(legacySlot ?? '0x0')
   const [art, rate, , line] = ilk
-  const debtFromVat = wadToNum((art * rate) / 10n ** 27n)
+  const debtFromVat = radToUsd(art * rate)
 
   const events: LogEvent[] = []
   for (const log of logs.slice(-40).reverse()) {
@@ -707,47 +725,60 @@ async function readLive(
     mid: wadToNum(reading.mid),
     lo: wadToNum(reading.lo),
     hi: wadToNum(reading.hi),
-    score: Number(reading.score),
+    score: 0,
     nFresh: Number(reading.nFresh),
     nInliers: Number(reading.nInliers),
     freshestAge: Number(reading.freshestAge),
     ok: reading.ok,
   }
+  // the dashboard shows the agreed additive score; the deployed contract may still multiply
+  const factors = factorsOf(sources, r)
+  r.score = scoreOf(factors, r.ok)
   const state = RISK_STATE[Number(risk[0])] ?? 'GREEN'
+  const osm: OsmState = {
+    cur: wadToNum(price[0]),
+    nxt: wadToNum(price[1]),
+    ageSec: Number(age),
+    status: OSM_STATUS[Number(osmStatus)] ?? 'UNINIT',
+  }
+  const model = deriveState(r, osm.cur, osm.status)
 
   return {
+    mode: 'fork',
+    block: Number(head),
     sources,
     reading: r,
-    factors: factorsOf(sources, r),
-    osm: {
-      cur: wadToNum(price[0]),
-      nxt: wadToNum(price[1]),
-      ageSec: Number(age),
-      status: OSM_STATUS[Number(osmStatus)] ?? 'UNINIT',
-    },
+    factors,
+    chainScore: Number(reading.score),
+    osm,
     risk: {
       state,
       guard: Boolean(risk[2]),
       lineUsd: radToUsd(risk[3]) || radToUsd(line),
       debtUsd: radToUsd(risk[4]) || debtFromVat,
-      reason: `controller score=${Number(risk[1])}`,
+      reason:
+        model.state === state
+          ? model.reason
+          : `set on-chain by the RiskController (its score = ${Number(risk[1])})`,
     },
+    vat: { debtUsd: debtFromVat, lineUsd: radToUsd(line) },
+    mat: spot ? Number(formatUnits(spot[1], 27)) : 1.4,
     legacy: {
       price: legacy.price,
       valid: legacy.valid,
       ageHours: legacyZzz > 0n ? Math.max(0, now - Number(legacyZzz)) / 3600 : Number(age) / 3600,
     },
     events,
-    mode: 'live',
     updatedAt: Date.now(),
   }
 }
 
-export function createLiveProvider(): DataProvider {
+export function createForkProvider(): DataProvider {
   let timer: ReturnType<typeof setInterval> | undefined
   let emit: ((s: Snapshot) => void) | undefined
+  let fail: ((msg: string) => void) | undefined
   let client: PublicClient | undefined
-  let cfg: { name: string; weight: number; maxAgeSec: number }[] | undefined
+  let cfg: SourceCfg[] | undefined
 
   const poll = async () => {
     try {
@@ -756,30 +787,27 @@ export function createLiveProvider(): DataProvider {
       if (!client) client = createPublicClient({ chain: foundry, transport: http(rpc) })
       // weights change only through governance, so read them once
       if (!cfg) cfg = await readSourceCfg(client, fork.oracleguard.aggregator as Address, fork)
-      emit?.(await readLive(client, fork, cfg))
+      emit?.(await readFork(client, fork, cfg))
     } catch (err) {
       cfg = undefined
-      emit?.({
-        ...snapFromWorld(seedWorld()),
-        mode: 'live',
-        error: err instanceof Error ? err.message : String(err),
-        updatedAt: Date.now(),
-      })
+      fail?.(`Fork RPC failed: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
     }
   }
 
   return {
-    start(onUpdate) {
+    start(onUpdate, onError) {
       emit = onUpdate
+      fail = onError
       void poll()
-      timer = setInterval(() => void poll(), POLL_MS)
+      timer = setInterval(() => void poll(), TICK_MS)
       return () => {
         if (timer) clearInterval(timer)
         emit = undefined
+        fail = undefined
       }
     },
     applyScript() {
-      /* J3: viem test actions against anvil */
+      /* fork mode: scenarios.ts drives anvil directly */
     },
   }
 }
@@ -788,7 +816,7 @@ let singleton: DataProvider | undefined
 
 export function getProvider(): DataProvider {
   if (!singleton) {
-    singleton = mode() === 'live' ? createLiveProvider() : createMockProvider()
+    singleton = mode() === 'fork' ? createForkProvider() : createMainnetProvider()
   }
   return singleton
 }

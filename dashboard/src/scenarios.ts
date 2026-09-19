@@ -1,9 +1,10 @@
 /**
  * J3 scenario controls. One `Runner` interface, two implementations:
  *
- *  - mock: hands the script to the simulated world in data.ts (no chain needed)
- *  - live: viem **test actions** against anvil (snapshot / revert / increaseTime / mine)
- *          plus MockSource.setPrice, SmartOSM.poke and RiskController.sync
+ *  - mainnet: hands the script to data.ts, which applies the fault on top of the real
+ *             mainnet feeds (OracleGuard is modelled in the browser there)
+ *  - fork:    viem **test actions** against anvil (snapshot / revert / increaseTime / mine)
+ *             plus MockSource.setPrice, SmartOSM.poke and RiskController.sync
  *
  * Steps follow docs/DEMO_SCRIPT.md §B. Two live-mode rules that bit us in K3:
  *   1. the three MockSources have a 1h maxAge -> refresh them before every poke
@@ -26,7 +27,7 @@ import mockAbiJson from './abi/IMockSource.json' with { type: 'json' }
 import priceSourceAbiJson from './abi/IPriceSource.json' with { type: 'json' }
 import controllerAbiJson from './abi/IRiskController.json' with { type: 'json' }
 import osmAbiJson from './abi/ISmartOSM.json' with { type: 'json' }
-import { ILK, getProvider, loadFork, mode, type ForkShape, type MockScriptName } from './data'
+import { ILK, getProvider, loadFork, mode, type ForkShape, type ScriptName } from './data'
 
 const mockAbi = mockAbiJson as Abi
 const priceSourceAbi = priceSourceAbiJson as Abi
@@ -36,17 +37,17 @@ const controllerAbi = controllerAbiJson as Abi
 /** anvil account #0 — the deployer, and therefore the MockSources' ward (see script/Deploy.s.sol). */
 const ANVIL_0 = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as Address
 
-export type ScenarioId = MockScriptName
+export type ScenarioId = ScriptName
 
 export const SCENARIOS: { id: ScenarioId; label: string; hint: string; kind: 'danger' | 'step' | 'reset' }[] = [
-  { id: 'reset', label: 'Reset', hint: 'revert the fork to the post-spell snapshot', kind: 'reset' },
-  { id: 's1', label: 'S1 stale feed', hint: 'warp +26h with nobody publishing → no quorum → RED', kind: 'danger' },
-  { id: 's2', label: 'S2 market −8%', hint: 'fast feeds drop, Chainlink lags → RED, liquidations stay open', kind: 'danger' },
-  { id: 's3', label: 'S3 compromised', hint: 'one source ×10 → rejected as an outlier', kind: 'danger' },
-  { id: 's4', label: 'S4 captured wick', hint: 'all −15% → poke → recover → 🛡️ guard ON', kind: 'danger' },
-  { id: 'poke', label: 'Poke', hint: 'refresh sources → SmartOSM.poke()', kind: 'step' },
-  { id: 'sync', label: 'Sync', hint: 'RiskController.sync(paxg)', kind: 'step' },
-  { id: 'warp1h', label: 'Warp +1h', hint: 'warp → refresh → poke → sync', kind: 'step' },
+  { id: 'reset', label: 'Reset', hint: 'clear every fault and go back to the starting state', kind: 'reset' },
+  { id: 's1', label: 'S1 stale feed', hint: 'publishers stop and 26h pass: every feed is stale → no quorum → RED', kind: 'danger' },
+  { id: 's2', label: 'S2 market −8%', hint: 'fast feeds drop 8%, Chainlink lags → RED, liquidations stay open', kind: 'danger' },
+  { id: 's3', label: 'S3 compromised', hint: 'Chainlink reports 10× the price → rejected as an outlier', kind: 'danger' },
+  { id: 's4', label: 'S4 captured wick', hint: 'every feed dips 15% long enough for the OSM to capture it, then recovers → 🛡️ guard ON', kind: 'danger' },
+  { id: 'poke', label: 'Poke', hint: 'SmartOSM.poke(): the queued price (nxt) becomes the price vaults use (cur); the new median is queued', kind: 'step' },
+  { id: 'sync', label: 'Sync', hint: 'RiskController.sync(): re-evaluate GREEN/YELLOW/RED, set the debt ceiling and the liquidation guard', kind: 'step' },
+  { id: 'warp1h', label: 'Warp +1h', hint: 'move the clock forward one hour (one OSM hop), then poke and sync', kind: 'step' },
 ]
 
 export type Runner = {
@@ -56,19 +57,19 @@ export type Runner = {
   prepare(): Promise<void>
 }
 
-// ── mock ────────────────────────────────────────────────────────────────────
+// ── mainnet ─────────────────────────────────────────────────────────────────
 
-function createMockRunner(): Runner {
+function createMainnetRunner(): Runner {
   return {
     async prepare() {},
     async run(id) {
       getProvider().applyScript(id)
-      return `${id} applied (mock)`
+      return `${id} applied on top of the real mainnet feeds`
     },
   }
 }
 
-// ── live ────────────────────────────────────────────────────────────────────
+// ── fork ────────────────────────────────────────────────────────────────────
 
 type Anvil = ReturnType<typeof makeClient>
 
@@ -206,8 +207,7 @@ function createLiveRunner(): Runner {
       const { osm, controller, mocks } = og(f)
 
       switch (id) {
-        case 'reset':
-        case 'idle': {
+        case 'reset': {
           if (snapshotId) await c.revert({ id: snapshotId })
           // anvil consumes a snapshot on revert -> take a fresh one for the next Reset
           snapshotId = await c.snapshot()
@@ -296,7 +296,7 @@ function createLiveRunner(): Runner {
 let singleton: Runner | undefined
 
 export function getRunner(): Runner {
-  if (!singleton) singleton = mode() === 'live' ? createLiveRunner() : createMockRunner()
+  if (!singleton) singleton = mode() === 'fork' ? createLiveRunner() : createMainnetRunner()
   return singleton
 }
 

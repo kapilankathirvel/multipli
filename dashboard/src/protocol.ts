@@ -1,11 +1,17 @@
 /**
- * A floating-point mirror of the on-chain logic, used for two things:
- *  1. the mock world (so every panel is internally consistent, not hand-written numbers)
- *  2. the Wq x Wd x Wf breakdown shown next to the score in live mode (review.md R1.2)
+ * A floating-point model of OracleGuard, used for two things:
+ *  1. mainnet mode: OracleGuard is not deployed on mainnet, so the dashboard runs this
+ *     model on the *real* mainnet feeds (every number it shows is derived, none is typed in)
+ *  2. the score breakdown shown next to the score in both modes
  *
- * Sources of truth:
- *  - contracts/src/OracleGuardAggregator.sol  (score = 100 * Wq * Wd * Wf)
- *  - review.md R1.2 (formula) and R3 (what each state changes)
+ * Score (Sep 19, team decision): an ADDITIVE score, so a volatility penalty can later be
+ * subtracted from it:
+ *     score = clamp(0..100, floor(100 * (0.5*Wq + 0.3*Wd + 0.2*Wf)) - volPenalty)
+ *     score = 0 when fewer than 2 feeds agree (no quorum)
+ * The contract (OracleGuardAggregator._score) still multiplies until Kapilan ports this.
+ *
+ * Sources of truth: contracts/src/OracleGuardAggregator.sol (steps 1-4: freshness,
+ * weighted median, MAD outliers, band) and review.md R3 (what each state changes).
  */
 
 /** Aggregator params (contract defaults) + controller params (review.md R3). */
@@ -20,9 +26,12 @@ export const P = {
   hopSec: 3600,
   jumpLimitBps: 500, // 5% -- only UPWARD jumps are quarantined (ADR-011)
   jumpMinScore: 80,
-  // RiskController (review.md R3)
+  // score = 100 * (q*Wq + d*Wd + f*Wf) - volPenalty (weights sum to 1)
+  scoreWeights: { q: 0.5, d: 0.3, f: 0.2 },
+  volPenalty: 0, // placeholder: the volatility penalty plugs in here
+  // RiskController (review.md R3): GREEN >= 80, YELLOW 40-79, RED < 40
   greenScore: 80,
-  yellowScore: 50,
+  yellowScore: 40,
   epsBps: 150, // live.lo below OSM*(1-1.5%) -> RED
   guardEpsBps: 300, // live.hi*(1-3%) above OSM -> guard
   lineCapUsd: 1_000_000,
@@ -39,6 +48,8 @@ export type Feed = {
   price: number
   ageSec: number
   ok: boolean
+  /** where the number comes from, e.g. "Uniswap v3 PAXG/USDC 30-min TWAP" */
+  via?: string
 }
 
 export type Source = {
@@ -54,6 +65,7 @@ export type Source = {
   maxAgeSec: number
   /** does it currently count towards confidence? (fresh AND inlier) */
   counts: boolean
+  via?: string
 }
 
 export type Factors = { wq: number; wd: number; wf: number; dBps: number }
@@ -91,16 +103,17 @@ function median(v: number[]): number {
   return s.length % 2 === 1 ? s[h] : (s[h - 1] + s[h]) / 2
 }
 
-/** Wq x Wd x Wf, exactly as `_score()` does it on-chain. */
+/** The three 0-1 factors the score is built from (same definitions as `_score()` on-chain). */
 export function factorsOf(sources: Source[], r: Pick<Reading, 'mid' | 'lo' | 'hi' | 'ok'>): Factors {
   const totalWeight = sources.reduce((a, s) => a + s.weight, 0) || 1
   const inlierWeight = sources.filter((s) => s.counts).reduce((a, s) => a + s.weight, 0)
   const wq = Math.min(1, inlierWeight / totalWeight)
 
   const dBps = r.mid > 0 ? ((r.hi - r.lo) / r.mid) * 10_000 : 0
-  const wd = Math.max(0, 1 - dBps / P.dMaxBps)
-
   const counting = sources.filter((s) => s.counts)
+  // with nothing counted there is no agreement to measure (a sum must not award these points)
+  const wd = counting.length > 0 ? Math.max(0, 1 - dBps / P.dMaxBps) : 0
+
   let wf = 0
   if (counting.length > 0) {
     const freshest = counting.reduce((a, s) => (s.ageSec < a.ageSec ? s : a))
@@ -110,8 +123,17 @@ export function factorsOf(sources: Source[], r: Pick<Reading, 'mid' | 'lo' | 'hi
   return { wq, wd, wf, dBps }
 }
 
+/** Points each factor adds to the score (they sum to the score before the penalty). */
+export function pointsOf(f: Factors): { q: number; d: number; f: number } {
+  const w = P.scoreWeights
+  return { q: 100 * w.q * f.wq, d: 100 * w.d * f.wd, f: 100 * w.f * f.wf }
+}
+
 export function scoreOf(f: Factors, ok: boolean): number {
-  return ok ? Math.floor(100 * f.wq * f.wd * f.wf) : 0
+  if (!ok) return 0
+  const pts = pointsOf(f)
+  // floor like Solidity's integer division; 1e-9 absorbs float noise (0.3 * 100 = 30.000000000000004)
+  return Math.max(0, Math.min(100, Math.floor(pts.q + pts.d + pts.f + 1e-9) - P.volPenalty))
 }
 
 /** Full aggregator pass: freshness -> weighted median -> MAD outliers -> band -> score. */
@@ -142,6 +164,7 @@ export function aggregate(feeds: Feed[]): { sources: Source[]; reading: Reading;
     share: f.weight / totalWeight,
     maxAgeSec: f.maxAgeSec,
     counts: fresh[i] && inlier[i],
+    via: f.via,
   }))
 
   const inl = sortedFresh.filter((f) => inlier[f.i])

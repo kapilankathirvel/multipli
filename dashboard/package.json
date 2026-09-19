@@ -13,7 +13,6 @@
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "recharts": "^3.10.1",
     "viem": "^2.56.8"
   },
   "devDependencies": {
