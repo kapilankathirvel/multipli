@@ -8,23 +8,19 @@ OracleGuard is an oracle safety layer for **rwaUSD**, Multipli's Maker-fork CDP 
 
 1. [Problem statement](#problem-statement)
 2. [Domain background](#domain-background)
-3. [What we found in the live contracts](#what-we-found-in-the-live-contracts)
-4. [Solution approach](#solution-approach)
-5. [How it solves the four oracle problems](#how-it-solves-the-four-oracle-problems)
-6. [Architecture](#architecture)
-7. [Data flow](#data-flow)
-8. [The confidence score](#the-confidence-score)
-9. [What GREEN / YELLOW / RED actually change](#what-green--yellow--red-actually-change)
-10. [Latency and manipulation: real-world solutions](#latency-and-manipulation-real-world-solutions)
-11. [Code map](#code-map)
-12. [Tech stack](#tech-stack)
-13. [Setup and running](#setup-and-running)
-14. [Demo scenarios](#demo-scenarios)
-15. [Testing and validation](#testing-and-validation)
-16. [Limitations](#limitations)
-17. [Roadmap](#roadmap)
-18. [Documentation](#documentation)
-19. [Team](#team)
+3. [Solution approach](#solution-approach)
+4. [How it solves the four oracle problems](#how-it-solves-the-four-oracle-problems)
+5. [Architecture](#architecture)
+6. [Data flow](#data-flow)
+7. [The confidence score](#the-confidence-score)
+8. [What GREEN / YELLOW / RED actually change](#what-green--yellow--red-actually-change)
+9. [Code map](#code-map)
+10. [Tech stack](#tech-stack)
+11. [Setup and running](#setup-and-running)
+12. [Demo scenarios](#demo-scenarios)
+13. [Testing and validation](#testing-and-validation)
+14. [Limitations](#limitations)
+15. [Documentation](#documentation)
 
 ---
 
@@ -52,19 +48,6 @@ We reduce these to **four concrete problems** that a gold-backed stablecoin actu
 - **PAXG.** Each token is backed by one fine troy ounce of LBMA gold held by Paxos. It trades 24/7 on-chain, while the gold market it tracks has opening hours.
 - **Oracle types.** **Push** (Chainlink: the network writes on-chain on a deviation or heartbeat, so it's slow when prices are quiet), **pull** (Pyth, RedStone: anyone can submit a fresh signed price in the same transaction), and **on-chain** (DEX TWAP: cheapest to manipulate on thin RWA pools).
 - **Units.** Maker units: WAD = 1e18, RAY = 1e27, RAD = 1e45. All OracleGuard prices are **USD per token in WAD**.
-
-## What we found in the live contracts
-
-We read the deployed contracts and reproduced each issue on a mainnet fork (full threat model V1–V13 in [`docs/PROBLEM.md`](docs/PROBLEM.md)):
-
-| Finding | What happens today | Proven on the fork |
-|---|---|---|
-| **Stale forever** (V1) | `PriceFeedAdapter` returns `(price, false)` after 24h, but the OSM **ignores the flag** and serves the old price as valid indefinitely | 31,231 rwaUSD minted on a **186-hour-old** price (`Baseline_S1`) |
-| **Only brake is self-destruct** (V4) | `OSM.void()` sets the price to 0 → `spot = 0` → every vault liquidatable | by code inspection; hence never usable |
-| **Single source** (V2) | one feed decides everything | $268,595 bad debt with a ×10 feed (`Baseline_S3`) |
-| **Captured wick** (V6) | a dip recorded at poke time stays in use for an hour after the market recovers | healthy 145% vault liquidated (`Baseline_S4`) |
-| **Instant oracle swap** (V5) | 4-of-8 admin Safe can change the price source with **no timelock** | governance finding; recommendation only |
-| **Slow, unincentivised updates** (V12) | Chainlink round **16.5h old** at our fork block; OSM and Spotter pokes are two separate unpaid steps | read from chain |
 
 ## Solution approach
 
