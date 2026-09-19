@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K2 `OracleGuardAggregator`, then K3 SmartOSM.
+**Next action:** kapilan.md K3 `SmartOSM`, then K4 RiskController.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -26,7 +26,7 @@
 - ✅ M3 `IPriceSource`, `ChainlinkSource`, `MockSource` + tests (K1) · K
 
 ## Phase 2: Core OracleGuard (hours 6–14) · A
-- ⬜ M4 `OracleGuardAggregator` + unit + fuzz · 4h
+- ✅ M4 `OracleGuardAggregator` + unit + fuzz + fork (K2) · K
 - ⬜ M5 `SmartOSM` + tests (ABI compat with Spotter, stale, quarantine, void disabled) · 4h
 
 ## Phase 3: Controller + spell + fixes (hours 14–20) · A
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K2 done:** Aggregator (median/MAD/score), 21 tests; demo starts at score 100; 40/40 suite green | K3 SmartOSM |
 | Sep 19 | Claude | **K1 done:** ChainlinkSource (fuzz found an overflow revert → guarded), MockSource, Auth, Line/Hole executors; 19/19 tests green | K2 Aggregator |
 | Sep 19 | Claude | **Phase 0 + Phase 1 M1/M2 done.** Foundry installed, harness + 3 baseline exploits green on real contracts. Found the Vat getter `dai()` is renamed `rwaUSD()` in this fork | M3 sources → Phase 2 |
 | Sep 19 | Claude | Spec review fixes: freshest-inlier score (ADR-009, demo starts GREEN), S3 math corrected (≈$312k per 10 PAXG), legacy `cur` = OSM storage slot 3 (verified), guard sets `hole=0` | Phase 0 → Baseline_S1 (Hour-6 gate) |

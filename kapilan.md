@@ -32,8 +32,9 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `feat(sources,executors): ChainlinkSource, MockSource, bounded Line/Hole executors`
 
 ### K2. `OracleGuardAggregator` (≈4h) · §2
-- [ ] `read()` (fresh filter → weighted median → MAD → band → score with freshest-inlier Wf) + `observations()`, `sourceCount()`, `sourceAt()`
-- [ ] Unit + fuzz tests; fork check: real Chainlink + 3 fresh mocks → score ≥ 80
+- [x] `read()` (fresh filter → weighted median → MAD → band → score with freshest-inlier Wf) + `observations()`, `sourceCount()`, `sourceAt()`; `MAX_PRICE` sanity bound; split into helpers (stack-too-deep, no via-ir)
+- [x] `test/unit/Aggregator.t.sol` (17 incl. fuzz) + `test/fork/Aggregator.fork.t.sol` (4): **score 100 at fork block**, S1a Chainlink 7d stale → 75, S2 −8% → mid follows market ($4,022), `read()` ≈105k gas. ✅ Sep 19
+- Demo weights: Chainlink 2 (maxAge 25h), Pyth 2, RedStone 2, DEX 1 (maxAge 1h)
 - **Commit:** `feat(aggregator): weighted median, MAD outliers, confidence score 0-100`
 
 ### K3. `SmartOSM` (≈4h) · §3
