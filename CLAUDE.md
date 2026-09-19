@@ -26,6 +26,8 @@ Hackathon: 30 hours, team of 3 (see below). **Critical path = Kapilan K1→K5 (c
 | File | Use it for |
 |---|---|
 | `PROGRESS.md` | **Task board + session log. Update after every task.** |
+| `SOLUTION_EXPLAINED.md` | **Beginner-friendly big picture**: background, problem, solution, design rationale, limitations, pitch, tough Q&A |
+| `IMPLEMENTATION_EXPLAINED.md` | File-by-file explanation of everything built + tests + code-level Q&A. **Keep in sync when code changes.** |
 | `review.md` | **Mentor review #1 + our answers (score definition, validation, state effects, risk reduction). Binding spec for K2.1/K4/K6b/V4.** |
 | `ACTION_ITEMS.md` | **Human follow-ups/reminders. Append new ones at the end of EVERY prompt; tick them off when resolved.** |
 | `docs/IMPLEMENTATION_PLAN.md` | Phase-by-phase how-to (files, steps, done-criteria) |
