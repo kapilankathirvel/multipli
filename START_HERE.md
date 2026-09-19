@@ -9,6 +9,7 @@
 
 | # | File | Time | What you get from it |
 |---|---|---|---|
+| 0 | **`PROBLEMS_AND_SOLUTIONS.md`** | 15 min | The whole story in plain language, no jargon. Read first for orientation. |
 | 1 | **`START_HERE.md`** (this file, Part B) | 90 min | The vocabulary and concepts. Everything else assumes these. |
 | 2 | **`SOLUTION_EXPLAINED.md`** | 30 min | The big picture: the problem, our solution, why each design choice, limitations, the 2-minute pitch, tough Q&A |
 | 3 | **`FLOW_EXPLAINED.md`** | 25 min | One price followed through every component with real numbers. Memorise §14 (the 10-line summary). |
