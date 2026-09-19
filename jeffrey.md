@@ -40,6 +40,8 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - [ ] Sources table (fresh/stale + inlier/outlier pills) · Confidence gauge 0–100 with GREEN/YELLOW/RED bands + lo–mid–hi band
 - [ ] Big state badge + 🛡️ liquidation-guard flag · Vat panel (debt vs line headroom; "new borrowing: open / limited / frozen")
 - [ ] Event log (decoded events)
+- [ ] **Mentor review R1:** a "contribution" column in the sources table = weight share (from `aggregator.sourceAt(i)` weights) and a ✓/✗ for whether it currently counts toward confidence; show the score as `Wq × Wd × Wf` (compute the three factors in the UI from `observations()` with the formula in `review.md` §R1.2)
+- [ ] **Mentor review R3:** a "What this state changes" panel that renders the `review.md` §R3 table row for the current state (borrow ✅/⚠️/❌, repay ✅, liquidations ✅/⏸️, line and hole values)
 - **Commit:** `feat(dashboard): Oracle War Room panels`
 
 ### J3. Scenario controls (≈1.5h), your own code, no keeper needed
@@ -56,10 +58,13 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 ### J5. Pitch deck (≈1.5h) · `docs/PITCH.md`
 - [ ] Fix the 3 claims first (`ACTION_ITEMS.md` → Pitch): cite or soften "13%", drop "first ever", TVL ≈$340M rwaUSD supply with a source
 - [ ] 8 slides per `docs/PITCH.md`; diagram from `docs/ARCHITECTURE.md`; numbers from `docs/DEMO_SCRIPT.md` §D; risk charts from Varun's `research/out/` when available (placeholder until then)
+- [ ] Round 1 → Round 2 line: the `mat` → debt-ceiling refinement (`docs/DECISIONS.md` ADR-001)
+- [ ] **3 mentor-review slides** (content in `review.md`): (1) score definition + oracle contribution table (§R1.3), (2) validation: incident list + FP/FN table (placeholder until Varun's `research/RESULTS.md`), (3) risk reduction: §R4.1 bounds + §R4.2 fork numbers
+- [ ] Add the `review.md` "Defence cheat-sheet" to the Q&A section of `docs/PITCH.md`
 - **Commit:** `docs(pitch): final deck + fixed claims`
 
 ### J6. Go live + video (≈1h, after the integration checkpoint)
 - [ ] `VITE_MODE=live` against Kapilan's running fork → click through S1–S4 → record the 3-min video (`docs/DEMO_SCRIPT.md` §A); link it in README + deck
 - **Commit:** `docs: demo video link`
 
-## Budget ≈8h.
+## Budget ≈9h (incl. mentor review items).

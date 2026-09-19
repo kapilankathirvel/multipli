@@ -37,6 +37,12 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - Demo weights: Chainlink 2 (maxAge 25h), Pyth 2, RedStone 2, DEX 1 (maxAge 1h)
 - **Commit:** `feat(aggregator): weighted median, MAD outliers, confidence score 0-100`
 
+### K2.1. Mentor review R1: weight-based confidence (≈0.5h) · see `review.md` §R1
+- [ ] `Wq = min(1, Σ w_inliers / Σ w_all)` (replace the count-based `nExpected`; keep `quorumMin` as a count)
+- [ ] Unit tests reproduce the **parity vectors in review.md §R1.4** exactly (100 / 85 / 71 / 75 / 0); update the existing tests' expected scores
+- [ ] Update `docs/ARCHITECTURE.md` §5 and `docs/CONTRACTS_SPEC.md` §2 to the weight-based formula
+- **Commit:** `feat(aggregator): weight-based confidence (mentor review R1)`
+
 ### K3. `SmartOSM` (≈4h) · §3
 - [ ] Maker OSM ABI + `init`, freshness, quarantine, atomic Spotter poke, `void()` disabled, `price()/status()/age()/lastReading()`
 - [ ] Tests incl. Spotter/Clipper working with it as pip on the fork
@@ -44,6 +50,7 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 
 ### K4. `RiskController` (≈2.5h) · §6
 - [ ] GREEN/YELLOW/RED, spaced hysteresis, line via executor, guard via executor
+- [ ] **Mentor review R3/R4:** GREEN line = `min(debt + greenGap, lineCap)`, refilled at most once per `refillInterval` (1h), i.e. a **rate limit** so `MaxLoss ≤ greenGap × hours` even for undetected correlated failures. Exact state table: `review.md` §R3
 - [ ] **Calendar is optional:** if `calendar == address(0)` treat the market as always open. That removes any dependency on Varun's SessionCalendar
 - **Commit:** `feat(controller): GREEN/YELLOW/RED risk controller + liquidation guard`
 
@@ -55,6 +62,12 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - [ ] S1a/S1b, S2, S3, S4 + repay-always + rollback (mirror `Baseline.t.sol`)
 - **Commit:** `test(fork): OracleGuard neutralises S1-S4 on real rwaUSD`
 
+### K6b. Mentor review R2: incident replay on the real contracts (≈1.5h)
+- [ ] `test/replay/Incidents.t.sol`: compressed inline traces (5–10 steps each) for I1–I8 from `review.md` §R2.3, fed through MockSources → SmartOSM → RiskController on the fork
+- [ ] At each step, log truth vs mid, state, guard, and mint/liquidation outcome; classify TP/FP/FN/TN with the §R2.4 definitions; print a summary table
+- [ ] Assertions: I1–I4 no FN; I7/I8 liquidations never blocked; I6 loss ≤ greenGap per hour (bounded, not detected)
+- **Commit:** `test(replay): historical oracle incidents on real rwaUSD (mentor review R2)`
+
 ### K7. INTEGRATION CHECKPOINT (≈1h, hour ~20): the only cross-person step
 - [ ] `git pull`. Wire Varun's `SessionCalendar` (and `PythSource` if ready) into `Deploy.s.sol` (one address each; if not ready, leave calendar = 0 / keep the mock)
 - [ ] Run Varun's `scripts/demo-up.ps1` → `deployments/fork.json` → tell Jeffrey to switch the dashboard to `VITE_MODE=live`
@@ -64,4 +77,4 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 ### K8. Invariants (≈1.5h, only if time) · TESTING §5
 - **Commit:** `test(invariant): spot>0, repay never blocked, line<=cap`
 
-## Budget ≈18h. Critical path K1→K6. Cut K8 first if behind.
+## Budget ≈20.5h (incl. mentor review items). Critical path K2.1→K3→K4→K5→K6→K6b. Cut K8 first if behind.
