@@ -9,13 +9,19 @@
 ### Understand before continuing (added Sep 19)
 - [ ] Read `SOLUTION_EXPLAINED.md` (≈30 min): big picture, limitations, 2-min pitch, tough Q&A.
 - [ ] Read `IMPLEMENTATION_EXPLAINED.md` (≈30 min): every contract and test, with numbers.
+- [ ] Read `FLOW_EXPLAINED.md` (≈25 min): one price followed through every component, with real numbers. Section 14 is the 10-line summary to memorise.
 - [ ] Practise the 2-minute pitch (Part 8) and the tough questions (Part 9) out loud; share both files with Varun & Jeffrey.
 
 ### Mentor review follow-ups (added Sep 19, K6b)
 - [ ] Re-read `review.md` §R2.4b (replay results) and **ADR-011** in `docs/DECISIONS.md`. "Our validation caught a real flaw and we fixed it" is a strong story for the mentor.
 - [ ] Tell **Varun**: SmartOSM's quarantine is now **asymmetric** (only low-agreement upward jumps; ADR-011). His Python model (`research/og_model.py`) must mirror it, and he can compare his FP/FN with §R2.4b.
 - [ ] Tell **Jeffrey**: add the §R2.4b table to the mentor "validation" slide (it replaces the placeholder).
-- [ ] Delete the stray `Untitled` file in the repo root (it only holds copied git commands) before committing.
+- [ ] Remove the stray `Untitled` file (only copied git commands; it slipped into the K6b commit): `git rm Untitled` (included in the K7/K8 commit commands).
+
+### K7/K8 follow-ups (added Sep 19)
+- [ ] Tell **Varun** to read the new "🔍 Integration review feedback" section in `varun.md`: 6 fixes to `research/RESULTS.md` before the mentor sees it. **Most important: real data, not synthetic, and the broken threshold sweep.**
+- [ ] Ask **Varun** to push SessionCalendar / PythSource / demo-up when ready. Wiring them is just `CALENDAR=… PYTH_SOURCE=…` on Deploy (no code change).
+- [ ] Tell **Jeffrey**: the integration checkpoint passed, so he can go live now (J6 note in `jeffrey.md`).
 
 ### Pitch / deck accuracy
 - [ ] (added Sep 19, docs review) Find a citable source for "Oracle attacks caused 13% of DeFi exploits in 2025", or soften it to "oracle manipulation is consistently among the top DeFi exploit classes". → `docs/PITCH.md`

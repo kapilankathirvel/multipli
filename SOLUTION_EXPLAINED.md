@@ -226,7 +226,7 @@ The mentor asked for four things (full answers: `review.md`):
 | Sources, executors, Aggregator (+ weight-based score), SmartOSM, RiskController | Kapilan | ✅ |
 | Deploy / Spell scripts (tested on a live anvil fork) + OracleGuard fork tests | Kapilan | ✅ (91 tests green) |
 | Historical incident replay on-chain (K6b): found and fixed the quarantine flaw | Kapilan | ✅ (101 tests) |
-| Integration (K7), invariants (K8) | Kapilan | ⬜ next |
+| Integration (K7: plug-ins + live anvil run) and invariant tests (K8: 6 safety promises × 3,200 random actions) | Kapilan | ✅ (110 tests) |
 | Validation study (FP/FN, Monte-Carlo), SessionCalendar, demo scripts, PythSource | Varun | in progress |
 | Dashboard, deck, video | Jeffrey | in progress |
 

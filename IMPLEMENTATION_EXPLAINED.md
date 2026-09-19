@@ -1,7 +1,7 @@
 # OracleGuard: what is implemented, explained file by file
 
 > Read `SOLUTION_EXPLAINED.md` first (the big picture). This file explains **every piece of code built so far**, how it works, how it's tested, and the numbers behind it, so you can answer code-level questions.
-> State as of this writing: **101 tests, all passing** (`cd contracts && forge test`).
+> State as of this writing: **110 tests, all passing** (`cd contracts && forge test`).
 
 ---
 
@@ -258,11 +258,29 @@ deployments/fork.example.json           frozen address-file schema
 - **It found a real design flaw** (quarantine froze the price during real crashes). We fixed it (ADR-011) and pinned it with regression tests. Tell this story: it shows the validation is genuine.
 - Run with the price trace: `REPLAY_TRACE=true forge test --match-contract IncidentReplayTest -vv`
 
-## 5. All test suites at a glance (101 tests)
+## 4c. Integration (K7) and invariants (K8)
+- **`DeployLib.wireExtras(d, calendar, pythSource)`**: plugs in Varun's SessionCalendar and real PythSource. Env `CALENDAR` / `PYTH_SOURCE` for `Deploy.s.sol`; the Pyth mock is replaced with the same weight 2 / maxAge 1h. `test/fork/Integration.t.sol` proves it, including a closed market → YELLOW.
+- **Live end-to-end run on anvil:** Deploy + Spell → GREEN 100; compromise Pyth ×10 and run one keeper cycle via `cast` → YELLOW 71, and the price the Vat uses is unchanged.
+- **Cross-implementation check:** the score formula exists 3 times (Solidity, Varun's Python, Jeffrey's TypeScript), and all reproduce the `review.md` examples exactly.
+- **Invariant tests** (`test/invariant/OracleGuard.invariant.t.sol`):
+  - Foundry drives a *Handler* that performs random actions: move one source (−90%…+900%), move all, break/stale a source, warp time, poke, sync, borrow, repay.
+  - The actions run against the real Aggregator/SmartOSM/RiskController/executors and a mock Vat with Maker's exact ceiling rule.
+  - After **every** action (64 runs × 50 steps = 3,200 actions per invariant), six promises must hold:
+    1. SmartOSM price always valid and > 0;
+    2. Spotter never sees 0;
+    3. **a repay never reverts**;
+    4. debt ceiling ≤ cap and liquidation limit ∈ {0, cap};
+    5. debt ≤ ceiling;
+    6. the state is always valid.
+  - All hold.
+
+## 5. All test suites at a glance (110 tests)
 | Suite | # | What it proves |
 |---|---|---|
 | unit/Sources (Chainlink + Mock) | 10 | conversion, never reverts (fuzz), clamp detection, auth |
 | unit/Aggregator + ParityVectors | 24 | median, outliers, staleness, quorum, freshness grace, weights, review.md examples exactly, fuzz |
+| invariant/OracleGuard | 6 | 6 safety promises × 3,200 random actions each |
+| fork/Integration | 3 | teammates' calendar / Pyth plug in via wireExtras |
 | replay/Incidents | 8 | historical incidents vs legacy: FP/FN, lag, worst-case debt (mentor review R2) |
 | unit/SmartOSM | 18 | Maker semantics, stale handling, quarantine + confirmation, real crash passes, void disabled, fuzz "never 0" |
 | unit/RiskController | 15 | every state, rate limit, YELLOW leak bound, RED repay, spam-proof upgrades, guard on/off/expiry/latch, no guard on real crash |
@@ -313,8 +331,7 @@ Run everything: `cd contracts && forge test`. Verbose with logs: `forge test -vv
 ---
 
 ## 8. What is NOT built yet (so you don't claim it)
-- **K7:** integration of Varun's SessionCalendar / PythSource + the live dashboard.
-- **K8:** invariant tests.
+- Varun's SessionCalendar / PythSource are *pluggable* (K7) but not pushed yet, so the demo still uses the Pyth mock and no calendar.
 - **Varun:** the validation study (FP/FN numbers), the calendar, the demo scripts.
 - **Jeffrey:** the dashboard and deck.
 - **Designed only (roadmap):** verifiable challenge window, round-TWAP poke, Proof-of-Reserve gate, timelock, fundamental gold anchor, tokenized-stock markets.

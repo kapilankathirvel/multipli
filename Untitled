@@ -1,4 +1,0 @@
-git add -A
-git commit -m "docs: SOLUTION_EXPLAINED + IMPLEMENTATION_EXPLAINED (pitch and defence prep)"
-git pull --rebase origin main
-git push

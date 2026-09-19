@@ -7,7 +7,7 @@
 > Status legend: ⬜ todo · 🟨 in progress · ✅ done · ⛔ blocked · ✂️ cut
 
 **Hackathon clock:** start `__:__` Sep 19 · hard stop 30h later · current hour: `0`
-**Next action:** kapilan.md K7 integration checkpoint (pull Varun/Jeffrey, wire calendar/Pyth, live demo), then K8 invariants. Mentor review plan: `review.md`.
+**Next action:** Kapilan's build tasks are done (K1–K8). Remaining: wire Varun's SessionCalendar/PythSource when pushed (env vars, no code), help Jeffrey go live, support Varun's study fixes, pitch prep. Mentor review plan: `review.md`.
 **Run tests:** `cd contracts && forge test --match-path "test/fork/*" -vv`
 
 ---
@@ -68,6 +68,7 @@
 | When | Who | Did | Next |
 |---|---|---|---|
 | Sep 19 | Claude | Phase 1 research + verified on-chain facts + full docs set | Phase 0 setup |
+| Sep 19 | Claude | **K7 + K8 done:** wireExtras plug-in (CALENDAR/PYTH_SOURCE env) + Integration.t.sol; live anvil E2E (GREEN 100 → Pyth×10 → YELLOW 71, mid unchanged); reviewed Varun's study (6 fixes listed in varun.md) + Jeffrey's parity check ✅; invariant suite 6×3,200 random actions all hold; 110/110 green | teammates |
 | Sep 19 | Claude | **K6b done:** incident replay I1–I8 on real contracts (mint FN 21→2, liq FN 5→1); found + fixed quarantine-freezes-crash flaw (ADR-011); 101/101 green | K7 integration |
 | Sep 19 | Claude | **K5+K6 done:** DeployLib/Deploy/Spell (smoke-tested on anvil), OracleGuard.t.sol (8): all baseline attacks neutralised on real rwaUSD; 91/91 green | K6b replay |
 | Sep 19 | Claude | **K4 done:** RiskController (15 tests): rate-limited GREEN, anchored YELLOW, RED=debt, guard with expiry+latch, spam-proof hysteresis | K5 Deploy/Spell |

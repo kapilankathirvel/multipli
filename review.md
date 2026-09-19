@@ -195,7 +195,10 @@ Proposed PAXG parameters: `lineCap` 1,000,000 · `greenGap` 250,000/h · `yellow
 | S1 stale 7 days | 31,231 rwaUSD minted on a 186h-old price | ✅ one source stale → YELLOW, new debt capped at $50k; all stale → RED, mint reverts, **repay works**, price never 0 |
 | S2 market −8% while the OSM lags | mint at the stale-high price | ✅ RED immediately; liquidations stay ON |
 
-### R4.3 From the validation study (R2, to be filled by Varun's results)
+### R4.3 From the validation study (R2)
+**On-chain replay (Kapilan, K6b), final:** see §R2.4b. Over-borrowing hours 21 → 2, unfair-liquidation hours 5 → 1, worst-case new debt at a wrong price $956,970 → ≤ $250,000/h.
+**Python study (Varun, `research/RESULTS.md`), first run:** parity vectors pass. Monte-Carlo (500 runs/cell): single-source faults (k = 1) have 0% FN for every fault type; majority faults (k ≥ 3 spikes/clamps) are the declared correlated-failure limit. ⚠️ Pending fixes before quoting numbers (see `varun.md` review feedback): real data instead of synthetic GBM, the threshold-sweep wiring, and the 4h-exposure row.
+*(Original placeholder, kept for reference:)*
 Expected bad debt per $1M of vault debt per year (legacy vs OracleGuard), FN/FP rates per incident class, unjust-liquidation count, and time spent in YELLOW/RED on normal days (the cost to users). → `research/RESULTS.md`
 
 ---

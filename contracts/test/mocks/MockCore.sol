@@ -55,3 +55,18 @@ contract MockCalendar {
         return open;
     }
 }
+
+/// @notice MockVat + Maker's exact debt-ceiling rule, for invariant testing:
+///         frob with dart > 0 requires Art*rate <= line ("Vat/ceiling-exceeded"); dart <= 0 never checks the ceiling.
+contract MockVatFrob is MockVat {
+    function borrow(bytes32 ilk, uint256 wad) external {
+        Ilk storage i = ilks[ilk];
+        i.Art += wad;
+        require(i.Art * i.rate <= i.line, "Vat/ceiling-exceeded");
+    }
+
+    function repay(bytes32 ilk, uint256 wad) external {
+        Ilk storage i = ilks[ilk];
+        i.Art -= wad; // underflow reverts only if repaying more than the debt
+    }
+}

@@ -70,12 +70,15 @@ abi/**  deployments/**  PROGRESS.md  CLAUDE.md  docs/* (except docs/PITCH.md = J
 - **Commit:** `test(replay): historical oracle incidents on real rwaUSD (mentor review R2)`
 
 ### K7. INTEGRATION CHECKPOINT (≈1h, hour ~20): the only cross-person step
-- [ ] `git pull`. Wire Varun's `SessionCalendar` (and `PythSource` if ready) into `Deploy.s.sol` (one address each; if not ready, leave calendar = 0 / keep the mock)
-- [ ] Run Varun's `scripts/demo-up.ps1` → `deployments/fork.json` → tell Jeffrey to switch the dashboard to `VITE_MODE=live`
-- [ ] Full `forge test` green, sync `PROGRESS.md`
+- [x] Pulled teammates' work. Varun: validation study (`research/`) ✅ reviewed (feedback in `varun.md`). Jeffrey: dashboard J1/J2 ✅ (`pnpm check:parity` reproduces all review.md vectors). **Not yet pushed:** Varun's SessionCalendar / PythSource / demo-up scripts.
+- [x] Plug-in points ready: `DeployLib.wireExtras` + env `CALENDAR=<addr>` / `PYTH_SOURCE=<addr>` in `Deploy.s.sol` (PythSource replaces the Pyth mock with the same weight/maxAge). `test/fork/Integration.t.sol` (3) proves both plug in with no other change
+- [x] **Live end-to-end on anvil:** Deploy + Spell → GREEN 100; Pyth compromised ×10 + keeper tick via `cast` → YELLOW 71, mid unchanged. Ready for Jeffrey's `VITE_MODE=live`
+- [x] Three independent implementations of the score agree on review.md §R1.4: Solidity (forge), Python (Varun), TypeScript (Jeffrey's parity script). 110/110 tests green ✅ Sep 19
+- [ ] When Varun pushes SessionCalendar/PythSource: deploy them, rerun Deploy with `CALENDAR=… PYTH_SOURCE=…` (no code change needed)
 - **Commit:** `chore(integration): wire calendar/pyth, live demo fork`
 
 ### K8. Invariants (≈1.5h, only if time) · TESTING §5
+- [x] `test/invariant/OracleGuard.invariant.t.sol`: a handler randomly moves/breaks/stales sources, warps time, pokes, syncs, borrows and repays against a mock Vat with Maker's exact ceiling rule. **6 invariants × 64 runs × 50 steps (3,200 random actions each), all hold:** peek always valid & > 0, Spotter never sees 0, **repay never blocked**, line ≤ cap and hole ∈ {0, cap}, debt ≤ line, state always valid ✅ Sep 19
 - **Commit:** `test(invariant): spot>0, repay never blocked, line<=cap`
 
 ## Budget ≈20.5h (incl. mentor review items). Critical path K2.1→K3→K4→K5→K6→K6b. Cut K8 first if behind.

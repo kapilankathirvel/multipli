@@ -57,4 +57,13 @@ Everything lives in `research/` (Python 3.11: pandas, numpy, matplotlib, yfinanc
 - [ ] Output `research/RESULTS.md` (tables, honest limitations incl. Mango-class FN) + charts in `research/out/` (confusion matrix, threshold sweep, loss comparison, weekend-gap histogram, σ√L buffer table)
 - **Commit:** `feat(research): validation study - incidents, Monte-Carlo FP/FN, risk reduction (mentor review)`
 
+## 🔍 Integration review feedback from Kapilan (K7, Sep 19): please fix before the mentor sees RESULTS.md
+The study structure is great: parity vectors pass, all 9 incidents, 500-run Monte-Carlo, charts. These points would be caught by the mentor:
+- [ ] **Use real data.** RESULTS.md says *"synthetic GBM (run fetch_data.py for real data)"*. The mentor explicitly asked for **real historical** data. Run `fetch_data.py` (Chainlink PAXG rounds via `https://mainnet.gateway.tenderly.co`, yfinance GC=F / PAXG-USD), regenerate, and state the data source + date range in §1.
+- [ ] **Fix the "4h undetected" row in §4**, which shows OracleGuard $1,000,000 > legacy $956,971 (−4.5%). OracleGuard's total can never exceed the remaining ceiling either: `min(greenGap × hours, lineCap − debt)` = $956,971 after 4h. The real difference is **time**: legacy exposes it all in one block, OracleGuard at ≤ $250k/h, which gives governance/keepers hours to react. Show exposure vs hours (1h: $957k vs $250k, 2h: $957k vs $500k…).
+- [ ] **Threshold sweep looks broken:** mean FP is 7.70 for every config and ε has no effect at all, yet the text says "raising greenScore to 90 significantly increases FP". Check that `green_score` / `eps` are actually passed into the model in the sweep loop.
+- [ ] **Drift FN = 0 even at k = 4** is suspicious: if every source drifts together, the median follows and it should be a FN (like spike k = 4 = 100%). Check the drift magnitude vs the 2% tolerance and the truth labelling.
+- [ ] **SmartOSM isn't modelled** (1h delay + asymmetric quarantine, ADR-011 in `docs/DECISIONS.md`). Either add it, or state in RESULTS.md that the model covers Aggregator + RiskController only, and cross-reference the on-chain replay results in `review.md` §R2.4b (which include SmartOSM).
+- [ ] `research/__pycache__/*.pyc` got committed. Run `git rm -r --cached research/__pycache__` (`.gitignore` now ignores them).
+
 ## Budget ≈9h (V4 4.5h + V1 1.5h + V3 1.5h + V2 optional). Hand-off: send Jeffrey `research/RESULTS.md` + charts as soon as V4 lands (mentor slides); tell Kapilan when V1 is pushed (wired at K7).

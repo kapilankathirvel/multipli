@@ -93,6 +93,29 @@ library DeployLib {
         });
     }
 
+    /// @notice K7 integration: plug in teammates' components without touching anything else.
+    ///  - `calendar` (Varun's SessionCalendar): markets-closed -> YELLOW for ilks with a sessionAsset.
+    ///  - `pythSource` (Varun's real PythSource): replaces the Pyth MockSource, same weight (2) and maxAge (1h).
+    /// Either may be address(0) (= keep the current wiring). Must be called by a ward of controller + aggregator.
+    function wireExtras(Deployment memory d, address calendar, address pythSource) internal {
+        if (calendar != address(0)) {
+            RiskController(d.controller).setCalendar(calendar);
+            d.calendar = calendar;
+        }
+        if (pythSource != address(0)) {
+            OracleGuardAggregator agg = OracleGuardAggregator(d.aggregator);
+            for (uint256 i; i < agg.sourceCount(); ++i) {
+                (address src,,) = agg.sourceAt(i);
+                if (src == d.pyth) {
+                    agg.removeSource(i);
+                    break;
+                }
+            }
+            agg.addSource(IPriceSource(pythSource), 2, 1 hours);
+            d.pyth = pythSource;
+        }
+    }
+
     function config(address agg, address osm, uint256 lineCap, uint256 holeCap)
         internal
         pure

@@ -7,3 +7,5 @@ node_modules/
 dist/
 deployments/*.local.json
 deployments/fork.json
+__pycache__/
+*.pyc

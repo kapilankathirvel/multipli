@@ -71,6 +71,7 @@ type Legacy   = { price: number; valid: boolean; ageHours: number };
 - **Commit:** `docs(pitch): final deck + fixed claims`
 
 ### J6. Go live + video (≈1h, after the integration checkpoint)
+> ✅ Integration checkpoint passed (K7): Deploy + Spell work end-to-end on anvil and write `deployments/fork.json` with the keys your dashboard expects. Until Varun's demo-up lands, bring the fork up manually with the commands in `contracts/script/Deploy.s.sol` / `Spell.s.sol` headers (or `docs/TECH_STACK.md`), then copy `deployments/fork.json` to `dashboard/public/fork.json`.
 - [ ] `VITE_MODE=live` against Kapilan's running fork → click through S1–S4 → record the 3-min video (`docs/DEMO_SCRIPT.md` §A); link it in README + deck
 - **Commit:** `docs: demo video link`
 

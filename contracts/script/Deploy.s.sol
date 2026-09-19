@@ -11,6 +11,7 @@ import {DeployLib} from "./DeployLib.sol";
 ///     --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ///
 /// The deployer (anvil account #0) keeps admin rights on the MockSources, so the dashboard can drive scenarios.
+/// Optional env (K7): CALENDAR=<SessionCalendar address>, PYTH_SOURCE=<PythSource address> (deploy them first).
 contract Deploy is Script {
     string internal constant OUT = "../deployments/fork.json";
 
@@ -19,8 +20,13 @@ contract Deploy is Script {
         uint256 legacyPrice = uint128(uint256(vm.load(C.LEGACY_OSM, bytes32(C.OSM_CUR_SLOT))));
         require(legacyPrice > 0, "Deploy/no-legacy-price");
 
+        // K7 integration: optional teammate components (leave unset to keep the defaults).
+        address calendar = vm.envOr("CALENDAR", address(0)); // Varun's SessionCalendar
+        address pythSource = vm.envOr("PYTH_SOURCE", address(0)); // Varun's real PythSource
+
         vm.startBroadcast();
         d = DeployLib.deploy(legacyPrice);
+        DeployLib.wireExtras(d, calendar, pythSource);
         vm.stopBroadcast();
 
         write(d);
